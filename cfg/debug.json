@@ -1,0 +1,43 @@
+{
+    "MachineNum": 2,
+    "ShardStartIndex": 0,
+    
+    "LogLevel": 4,
+    "LogFile": "",
+    "IsProgressBar": true,
+    "IsLogProgress": true,
+    "LogProgressInterval": 20,
+
+    "Role": "",
+
+    "ClientNum": 1,
+    "ClientId": 0,
+
+    "ShardNum": 2,
+    "ShardId": 0,
+    "ShardSize": 8,
+    "MultiSignRequiredNum": 2,
+    "ComAllNodeNum":8,
+    "NodeId": 0,
+
+
+    "MaxTxNum": 60000,
+    "InjectSpeed": 1000,
+    "RecommitInterval": 4,
+    "MaxBlockTXSize": 1000,
+
+    "Height2Reconfig": 20000,
+    "ReconfigMode": "lesssync",
+    "FastsyncBlockNum":20,
+
+    "TbchainBlockIntervalSecs": 10,
+    "Height2Rollback": 2000,
+    "Height2Confirm": 0,
+    "BeaconChainMode": 2, 
+    "BeaconChainPort": 8545,
+    "BeaconChainID": 1337,
+
+    "ExitMode": 1,
+
+    "DatasetDir": "data/len3_data.csv"
+}

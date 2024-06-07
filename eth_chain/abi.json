@@ -1,0 +1,302 @@
+[
+	{
+		"inputs": [
+			{
+				"components": [
+					{
+						"internalType": "uint32",
+						"name": "shardID",
+						"type": "uint32"
+					},
+					{
+						"internalType": "uint64",
+						"name": "height",
+						"type": "uint64"
+					},
+					{
+						"internalType": "string",
+						"name": "blockHash",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "txHash",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "statusHash",
+						"type": "string"
+					}
+				],
+				"internalType": "struct ContractTB[]",
+				"name": "genesisTBs",
+				"type": "tuple[]"
+			},
+			{
+				"internalType": "uint32",
+				"name": "_minSigCnt",
+				"type": "uint32"
+			},
+			{
+				"internalType": "uint32",
+				"name": "_shardNum",
+				"type": "uint32"
+			},
+			{
+				"internalType": "address[][]",
+				"name": "addrs",
+				"type": "address[][]"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "constructor"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "message",
+				"type": "string"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint32",
+				"name": "shardID",
+				"type": "uint32"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint64",
+				"name": "height",
+				"type": "uint64"
+			},
+			{
+				"indexed": false,
+				"internalType": "address",
+				"name": "addr",
+				"type": "address"
+			}
+		],
+		"name": "LogMessage",
+		"type": "event"
+	},
+	{
+		"inputs": [
+			{
+				"components": [
+					{
+						"internalType": "uint32",
+						"name": "shardID",
+						"type": "uint32"
+					},
+					{
+						"internalType": "uint64",
+						"name": "height",
+						"type": "uint64"
+					},
+					{
+						"internalType": "string",
+						"name": "blockHash",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "txHash",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "statusHash",
+						"type": "string"
+					}
+				],
+				"internalType": "struct ContractTB",
+				"name": "tb",
+				"type": "tuple"
+			},
+			{
+				"internalType": "bytes[]",
+				"name": "sigs",
+				"type": "bytes[]"
+			},
+			{
+				"internalType": "bytes[]",
+				"name": "vrfs",
+				"type": "bytes[]"
+			},
+			{
+				"internalType": "uint64",
+				"name": "seedHeight",
+				"type": "uint64"
+			},
+			{
+				"internalType": "address[]",
+				"name": "signers",
+				"type": "address[]"
+			}
+		],
+		"name": "addTB",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"name": "addr2Shard",
+		"outputs": [
+			{
+				"internalType": "uint32",
+				"name": "",
+				"type": "uint32"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"name": "addrRecorded",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address[]",
+				"name": "addrs",
+				"type": "address[]"
+			},
+			{
+				"internalType": "bytes[]",
+				"name": "vrfs",
+				"type": "bytes[]"
+			},
+			{
+				"internalType": "uint64",
+				"name": "seedHeight",
+				"type": "uint64"
+			}
+		],
+		"name": "adjustRecordedAddrs",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint32",
+				"name": "shardID",
+				"type": "uint32"
+			},
+			{
+				"internalType": "uint64",
+				"name": "height",
+				"type": "uint64"
+			}
+		],
+		"name": "getTB",
+		"outputs": [
+			{
+				"components": [
+					{
+						"internalType": "uint32",
+						"name": "shardID",
+						"type": "uint32"
+					},
+					{
+						"internalType": "uint64",
+						"name": "height",
+						"type": "uint64"
+					},
+					{
+						"internalType": "string",
+						"name": "blockHash",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "txHash",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "statusHash",
+						"type": "string"
+					}
+				],
+				"internalType": "struct ContractTB",
+				"name": "tb",
+				"type": "tuple"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint32",
+				"name": "",
+				"type": "uint32"
+			},
+			{
+				"internalType": "uint64",
+				"name": "",
+				"type": "uint64"
+			}
+		],
+		"name": "tbs",
+		"outputs": [
+			{
+				"internalType": "uint32",
+				"name": "shardID",
+				"type": "uint32"
+			},
+			{
+				"internalType": "uint64",
+				"name": "height",
+				"type": "uint64"
+			},
+			{
+				"internalType": "string",
+				"name": "blockHash",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "txHash",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "statusHash",
+				"type": "string"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	}
+]

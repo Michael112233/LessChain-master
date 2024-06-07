@@ -1,0 +1,33 @@
+{
+    "LogLevel": 4,
+    "LogFile": "experiments/results/rollbackV2/height6/shard16.log",
+    "IsProgressBar": true,
+    "IsLogProgress": true,
+    "LogProgressInterval": 20,
+
+    "ClientNum": 1,
+
+    "ShardNum": 16,
+    "ShardSize": 12,
+    "MultiSignRequiredNum": 1,
+
+    "MaxTxNum": 640000,
+    "InjectSpeed": 4000,
+    "RecommitInterval": 4,
+    "MaxBlockTXSize": 1000,
+
+    "Height2Reconfig": 2000,
+    "ReconfigTime": 4,
+
+    "TbchainBlockIntervalSecs": 10,
+    "Height2Rollback": 6,
+    "Height2Confirm": 0,
+
+    "BeaconChainMode": 2,
+    "BeaconChainPort": 8545,
+    "BeaconChainID": 1337,
+
+    "ExitMode": 1,
+
+    "DatasetDir": "data/len3_data.csv"
+}
