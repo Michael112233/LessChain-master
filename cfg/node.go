@@ -26,9 +26,9 @@ func init() {
 	hostTable := make(map[uint32]string)
 	startPortTable := make(map[uint32]uint32)
 	var startPort uint32 = 20000
-	hostTable[0] = "192.168.3.6"
+	hostTable[0] = "192.168.3.2"
 	startPortTable[0] = startPort
-	hostTable[1] = "192.168.3.5"
+	hostTable[1] = "192.168.3.6"
 	startPortTable[1] = startPort
 	hostTable[2] = "192.168.3.7"
 	startPortTable[2] = startPort
