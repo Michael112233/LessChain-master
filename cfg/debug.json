@@ -8,7 +8,7 @@
     "IsLogProgress": true,
     "LogProgressInterval": 20,
 
-    "Role": "",
+    "Role": "node",
 
     "ClientNum": 1,
     "ClientId": 0,
