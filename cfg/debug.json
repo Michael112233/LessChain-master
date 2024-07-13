@@ -8,7 +8,7 @@
     "IsLogProgress": true,
     "LogProgressInterval": 20,
 
-    "Role": "node",
+    "Role": "",
 
     "ClientNum": 1,
     "ClientId": 0,
@@ -21,7 +21,7 @@
     "NodeId": 0,
 
 
-    "MaxTxNum": 60000,
+    "MaxTxNum": 240000,
     "InjectSpeed": 1000,
     "RecommitInterval": 4,
     "MaxBlockTXSize": 1000,

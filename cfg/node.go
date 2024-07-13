@@ -12,12 +12,12 @@ var (
 
 // 包被引用时自动执行init函数
 func init() {
-	GethIPAddr = "192.168.3.4"
-	BooterAddr = "192.168.3.4:" + fmt.Sprint(18000)
+	GethIPAddr = "192.168.3.2"
+	BooterAddr = "192.168.3.2:" + fmt.Sprint(18000)
 
 	// 配置1个客户端，但为了可扩展，也实现成map的形式
 	ClientTable = make(map[uint32]string)
-	ClientTable[0] = "192.168.3.4:" + fmt.Sprint(19000)
+	ClientTable[0] = "192.168.3.2:" + fmt.Sprint(19000)
 
 	// 从50002开始配置分片节点
 	// 配置每个分片20个节点的地址
@@ -26,7 +26,7 @@ func init() {
 	hostTable := make(map[uint32]string)
 	startPortTable := make(map[uint32]uint32)
 	var startPort uint32 = 20000
-	hostTable[0] = "192.168.3.2"
+	hostTable[0] = "192.168.3.4"
 	startPortTable[0] = startPort
 	hostTable[1] = "192.168.3.6"
 	startPortTable[1] = startPort
