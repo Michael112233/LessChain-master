@@ -18,6 +18,13 @@ import (
 	"time"
 )
 
+func min(a, b int) int {
+	if a > b {
+		return b
+	}
+	return a
+}
+
 func dial(addr string) (net.Conn, error) {
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
@@ -131,7 +138,9 @@ func comGetHeightFromShard(shardID uint32, msg interface{}) *big.Int {
 	return height
 }
 
-/* 分片向一个中心化节点发送创世区块信标和初始账户地址
+/*
+	分片向一个中心化节点发送创世区块信标和初始账户地址
+
 该消息只进行一次，不需通过长连接发送
 */
 func shardSendGenesis(msg interface{}) {
@@ -411,7 +420,7 @@ func comLeaderInitMultiSign(comID uint32, msg interface{}) {
 
 	// 向委员会中的所有共识节点发送（包括自己）
 	var i uint32
-	for i = 0; i < uint32(shardSize); i++ {
+	for i = 0; i < uint32(min(shardSize, len(cfg.ComNodeTable[comID]))); i++ {
 		addr := cfg.ComNodeTable[comID][i]
 		if addr == "" {
 			if i == 3 {
@@ -530,9 +539,9 @@ func booterSendContract(msg interface{}) {
 
 }
 
-/////////////////////
-///// pbft //////////
-/////////////////////
+// ///////////////////
+// /// pbft //////////
+// ///////////////////
 func sendPbftMsg(comID uint32, msg interface{}, msgType string) {
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
@@ -573,12 +582,14 @@ func sendPbftMsg(comID uint32, msg interface{}, msgType string) {
 
 	var i uint32
 	nodeAddr := node_ref.NodeInfo.NodeAddr
-	for i = 0; i < uint32(shardSize); i++ {
+	for i = 0; i < uint32(min(shardSize, len(cfg.ComNodeTable[comID]))); i++ { // original ShardSize
 		if i > 0 && (msgType == CReply || msgType == CRequestOldrequest) { // reply、CRequestOldrequest 只需发给leader
 			return
 		}
-
+		log.Debug(fmt.Sprintf("%d %v\n", uint32(min(shardSize, len(cfg.ComNodeTable[comID]))), cfg.ComNodeTable))
 		addr := cfg.ComNodeTable[comID][i]
+
+		log.Debug(fmt.Sprintf("addr: %v, comid: %v, i: %v\n", addr, comID, i))
 		if addr == nodeAddr {
 			continue // 不用发给自己
 		}

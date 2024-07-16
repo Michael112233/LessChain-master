@@ -17,11 +17,11 @@
     "ShardId": 0,
     "ShardSize": 8,
     "MultiSignRequiredNum": 2,
-    "ComAllNodeNum":8,
+    "ComAllNodeNum": 8,
     "NodeId": 0,
 
 
-    "MaxTxNum": 60000,
+    "MaxTxNum": 240000,
     "InjectSpeed": 1000,
     "RecommitInterval": 4,
     "MaxBlockTXSize": 1000,

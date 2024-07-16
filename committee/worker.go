@@ -212,7 +212,6 @@ func analyseStates(states *core.ShardSendState) (map[common.Address]*types.State
 	addr2State := make(map[common.Address]*types.StateAccount)
 	// merkle 路径上每个节点与其哈希的映射
 	hash2Node := make(map[string]myTrie.Node)
-
 	for addr, encodedState := range states.AccountData {
 		var state types.StateAccount
 		err := rlp.DecodeBytes(encodedState, &state)
@@ -381,6 +380,7 @@ func rebuildHelper(
 			if ok { // 该地址的状态被更新过
 				encodedBytes, err := rlp.EncodeToBytes(stateAccount)
 				// log.Debug(fmt.Sprintf("stateAccount data: %v encodedBytes: %v", stateAccount, encodedBytes))
+				// log.Debug(fmt.Sprintf("Balance: %v, %v, %v, %v", stateAccount.Balance, stateAccount.Nonce, stateAccount.Root, stateAccount.CodeHash))
 				if err != nil {
 					log.Error("rlp encode err", "err", err)
 				}
