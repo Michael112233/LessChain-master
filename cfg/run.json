@@ -11,7 +11,7 @@
     "ShardSize": 12,
     "MultiSignRequiredNum": 1,
 
-    "MaxTxNum": 640000,
+    "MaxTxNum": 40000,
     "InjectSpeed": 4000,
     "RecommitInterval": 4,
     "MaxBlockTXSize": 1000,
