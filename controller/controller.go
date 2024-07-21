@@ -72,7 +72,58 @@ func runClient(allCfg *cfg.Cfg) {
 	result.PrintTXReceipt()
 	thrput, avlatency, rollbackRate, overloads := result.GetThroughtPutAndLatencyV2()
 	log.Info("GetThroughtPutAndLatency", "thrput", thrput, "avlatency", avlatency, "rollbackRate", rollbackRate, "overloads", overloads)
+}
 
+// 运行以太坊客户端
+func runEthClient(allCfg *cfg.Cfg) {
+	cid := allCfg.ClientId
+	addr := cfg.ClientTable[uint32(cid)]
+
+	client := client.NewClient(addr, cid, allCfg.Height2Rollback, allCfg.ShardNum, allCfg.ExitMode)
+	log.Info("NewEthClient", "Info", client)
+
+	// 加载交易数据，分配交易到每个节点中
+	data.LoadETHData(allCfg.DatasetDir, allCfg.MaxTxNum)
+	data.SetTxShardId(allCfg.ShardSize)
+
+	// 注入交易到客户端
+	data.SetTX2ClientTable(allCfg.ClientNum)
+	data.InjectTX2Client(client)
+
+	client.Print()
+
+	// 初始化信标链接口
+	beaconChainConfig := &core.BeaconChainConfig{
+		Mode:                 allCfg.BeaconChainMode,
+		ChainId:              allCfg.BeaconChainID,
+		Port:                 allCfg.BeaconChainPort,
+		BlockInterval:        allCfg.TbchainBlockIntervalSecs,
+		Height2Confirm:       uint64(allCfg.Height2Confirm),
+		MultiSignRequiredNum: allCfg.MultiSignRequiredNum,
+	}
+	tbChain = beaconchain.NewTBChain(beaconChainConfig, allCfg.ShardNum)
+
+	var wg sync.WaitGroup
+
+	/* 创建消息中心(用于客户端和信标链的交互等) */
+	messageHub := messageHub.NewMessageHub()
+
+	/* 设置各个分片、委员会和客户端、信标链的通信渠道 */
+	messageHub.Init(client, nil, nil, tbChain, 1, allCfg.ShardSize, 0, allCfg.ClientNum, &wg)
+
+	startClient(client, allCfg.InjectSpeed, allCfg.RecommitIntervalSecs)
+	toStopClient(client, allCfg.RecommitIntervalSecs, allCfg.LogProgressInterval,
+		allCfg.IsLogProgress, allCfg.ExitMode)
+
+	stopTBChain()
+	messageHub.Close()
+
+	wg.Wait()
+
+	/* 打印交易执行结果 */
+	result.PrintTXReceipt()
+	thrput, avlatency, rollbackRate, overloads := result.GetThroughtPutAndLatencyV2()
+	log.Info("GetThroughtPutAndLatency", "thrput", thrput, "avlatency", avlatency, "rollbackRate", rollbackRate, "overloads", overloads)
 }
 
 func runNode(allCfg *cfg.Cfg) {
@@ -217,7 +268,7 @@ func Main(cfgfilename string, role string, shardNum, shardID, nodeID int32) {
 	case "booter":
 		runBooterNode(cfg)
 	default:
-		log.Error("unknown roleType", "type", role)
+		log.Error("unknown roleType in Ethereum", "type", role)
 	}
 
 	/* 结束 */

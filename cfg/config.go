@@ -44,6 +44,9 @@ type Cfg struct {
 	BeaconChainPort          int `json:"BeaconChainPort"`
 	ExitMode                 int `json:"ExitMode"`
 	ReconfigTime             int `json:"ReconfigTime"`
+
+	// scheme type
+	Scheme string `json:"Scheme"`
 }
 
 var (
