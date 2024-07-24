@@ -95,7 +95,6 @@ func ExecutionInitialize(shardID uint32, _node *eth_node.EthNode, height2Reconfi
 }
 
 func (s *Shard) Start() {
-	log.Debug("Execution Start")
 	s.ExecutionStart()
 }
 
@@ -133,7 +132,6 @@ func (s *Shard) addGenesisTB() {
 		Target_nodeAddr: cfg.BooterAddr,
 	}
 
-	log.Debug("start to send genesis")
 	s.messageHub.Send(core.MsgTypeShardSendGenesis, 0, genesis, nil)
 }
 

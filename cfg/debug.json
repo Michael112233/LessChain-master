@@ -1,5 +1,5 @@
 {
-    "MachineNum": 1,
+    "MachineNum": 2,
     "ShardStartIndex": 0,
     
     "LogLevel": 4,
@@ -13,7 +13,7 @@
     "ClientNum": 1,
     "ClientId": 0,
 
-    "ShardNum": 1,
+    "ShardNum": 2,
     "ShardId": 0,
     "ShardSize": 8,
     "MultiSignRequiredNum": 2,
@@ -21,7 +21,7 @@
     "NodeId": 0,
 
 
-    "MaxTxNum": 60000,
+    "MaxTxNum": 240000,
     "InjectSpeed": 1000,
     "RecommitInterval": 4,
     "MaxBlockTXSize": 1000,

@@ -144,7 +144,6 @@ func comGetHeightFromShard(shardID uint32, msg interface{}) *big.Int {
 该消息只进行一次，不需通过长连接发送
 */
 func shardSendGenesis(msg interface{}) {
-	log.Debug("Receive shard send genesis")
 	data := msg.(*core.ShardSendGenesis)
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
