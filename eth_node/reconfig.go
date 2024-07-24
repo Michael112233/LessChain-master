@@ -17,7 +17,7 @@ type HandleReconfigMsgs struct {
 }
 
 // leader节点调用
-func (n *Node) AddReconfigResult(res *core.ReconfigResult) {
+func (n *EthNode) AddReconfigResult(res *core.ReconfigResult) {
 	if n.NodeInfo.NodeID != 0 {
 		log.Error(fmt.Sprintf("wrong invoking function. only leader node can invoke this function. curNodeInfo: %v", n.NodeInfo))
 	}
@@ -37,7 +37,7 @@ func (n *Node) AddReconfigResult(res *core.ReconfigResult) {
 }
 
 // leader节点调用
-func (n *Node) AddReconfigResults(res *core.ComReconfigResults) {
+func (n *EthNode) AddReconfigResults(res *core.ComReconfigResults) {
 	if n.com2ReconfigResults == nil { // 第一次重组时
 		n.com2ReconfigResults = make(map[uint32]*core.ComReconfigResults)
 		n.com2ReconfigResults[res.ComID] = res
@@ -57,19 +57,19 @@ func (n *Node) AddReconfigResults(res *core.ComReconfigResults) {
 	}
 }
 
-func (n *Node) InitReconfig(data *core.InitReconfig) {
+func (n *EthNode) InitReconfig(data *core.InitReconfig) {
 	log.Debug("InitReconfig...", "comID", n.NodeInfo.ComID, "seedHeight", data.SeedHeight, "seed", data.Seed)
 	n.com.SetOldTxPool()
-	data.ComNodeNum = uint32(n.comAllNodeNum)
+	data.ComNodeNum = uint32(n.CommitteeSize)
 	n.messageHub.Send(core.MsgTypeLeaderInitReconfig, n.NodeInfo.ComID, data, nil)
 }
 
-func (n *Node) HandleLeaderInitReconfig(data *core.InitReconfig) {
+func (n *EthNode) HandleLeaderInitReconfig(data *core.InitReconfig) {
 	n.com.UpdateTbChainHeight(data.SeedHeight)
 
 	acc := n.GetAccount()
 	vrfValue := acc.GenerateVRFOutput(data.Seed[:]).RandomValue
-	newComId := utils.VrfValue2Committee(vrfValue, uint32(n.CommitteeNum))
+	newComId := utils.VrfValue2Shard(vrfValue, uint32(n.committeeNum))
 
 	reply := &core.ReconfigResult{
 		Seed:         data.Seed,
@@ -84,17 +84,17 @@ func (n *Node) HandleLeaderInitReconfig(data *core.InitReconfig) {
 	n.messageHub.Send(core.MsgTypeSendReconfigResult2ComLeader, data.ComID, reply, nil)
 }
 
-func (n *Node) HandleSendReconfigResult2ComLeader(data *core.ReconfigResult) {
+func (n *EthNode) HandleSendReconfigResult2ComLeader(data *core.ReconfigResult) {
 	// 省略对vrf的检查...
 
 	n.reconfigResLock.Lock()
 
 	n.AddReconfigResult(data)
-	if len(n.reconfigResults) == int(n.comAllNodeNum) {
+	if len(n.reconfigResults) == int(n.CommitteeSize) {
 		res := &core.ComReconfigResults{
 			ComID:      n.NodeInfo.ComID,
 			Results:    n.reconfigResults,
-			ComNodeNum: uint32(n.comAllNodeNum),
+			ComNodeNum: uint32(n.CommitteeSize),
 		}
 		// 发给自己也用网络，不直接存，这样可以统一处理
 		n.reconfigResLock.Unlock()
@@ -104,21 +104,21 @@ func (n *Node) HandleSendReconfigResult2ComLeader(data *core.ReconfigResult) {
 	}
 }
 
-func (n *Node) HandleSendReconfigResults2AllComLeaders(data *core.ComReconfigResults) {
+func (n *EthNode) HandleSendReconfigResults2AllComLeaders(data *core.ComReconfigResults) {
 	// 省略对vrf的检查...
 
 	n.reconfigResLock.Lock()
 	defer n.reconfigResLock.Unlock()
 
 	n.AddReconfigResults(data)
-	if len(n.com2ReconfigResults) == n.shardNum {
+	if len(n.com2ReconfigResults) == n.committeeNum {
 		// 将所有vrf结果发送给委员会内的节点，包括发送者leader本身
 		n.messageHub.Send(core.MsgTypeSendReconfigResults2ComNodes, n.NodeInfo.ComID, n.com2ReconfigResults, nil)
 	}
 
 }
 
-func (n *Node) HandleSendReconfigResults2ComNodes(data *map[uint32]*core.ComReconfigResults) {
+func (n *EthNode) HandleSendReconfigResults2ComNodes(data *map[uint32]*core.ComReconfigResults) {
 	// 省略对vrf的检查...
 
 	// 先得到每个新委员会中的节点结果
@@ -140,7 +140,7 @@ func (n *Node) HandleSendReconfigResults2ComNodes(data *map[uint32]*core.ComReco
 	newComNodeTable := make(map[uint32]map[uint32]string)
 	var oldComLeaderAddr string
 	var i uint32
-	for i = 0; i < uint32(n.shardNum); i++ {
+	for i = 0; i < uint32(n.committeeNum); i++ {
 		newComNodeTable[i] = make(map[uint32]string)
 		for newID, result := range newCom2Results[i] {
 			newComNodeTable[i][uint32(newID)] = result.OldNodeInfo.NodeAddr
@@ -174,16 +174,16 @@ func (n *Node) HandleSendReconfigResults2ComNodes(data *map[uint32]*core.ComReco
 	n.EndReconfig(newCom2Results, oldComLeaderAddr)
 }
 
-func (n *Node) updateNodeInfo(newNodeInfo *core.NodeInfo) {
+func (n *EthNode) updateNodeInfo(newNodeInfo *core.NodeInfo) {
 	n.NodeInfo = newNodeInfo
 	n.pbftNode.NodeInfo = newNodeInfo
 }
 
-func (n *Node) EndReconfig(newCom2Results map[uint32][]*core.ReconfigResult, oldComLeaderAddr string) {
+func (n *EthNode) EndReconfig(newCom2Results map[uint32][]*core.ReconfigResult, oldComLeaderAddr string) {
 	// 更新委员会节点数量
-	n.comAllNodeNum = len(newCom2Results[n.NodeInfo.ComID])
-	log.Debug(fmt.Sprintf("after reconfiguration, com %d has %d nodes in total.", n.NodeInfo.ComID, n.comAllNodeNum))
-	if n.comAllNodeNum < 4 { // pbft协议至少需要包括leader在内的3个节点
+	n.CommitteeSize = len(newCom2Results[n.NodeInfo.ComID])
+	log.Debug(fmt.Sprintf("after reconfiguration, com %d has %d nodes in total.", n.NodeInfo.ComID, n.CommitteeSize))
+	if n.CommitteeSize < 4 { // pbft协议至少需要包括leader在内的3个节点
 		report := &core.ErrReport{
 			NodeAddr: n.NodeInfo.NodeAddr,
 			Err:      fmt.Sprintf("after reconfiguration, com %d has less than 4 nodes, not enough for pbft consensus", n.NodeInfo.ComID),
@@ -208,7 +208,7 @@ func (n *Node) EndReconfig(newCom2Results map[uint32][]*core.ReconfigResult, old
 	n.com.SetOldTxPool()
 
 	// 重新启动委员会和worker、新建交易池
-	n.com.Start(n.NodeInfo.NodeID)
+	n.com.ConsensusStart(n.NodeInfo.NodeID)
 
 	if utils.IsComLeader(n.NodeInfo.NodeID) { // 每个委员会的leader都会给客户端发送新表
 		n.messageHub.Send(core.MsgTypeSendNewNodeTable2Client, 0, cfg.ComNodeTable, nil)
@@ -220,7 +220,7 @@ func (n *Node) EndReconfig(newCom2Results map[uint32][]*core.ReconfigResult, old
 	if utils.IsComLeader(n.NodeInfo.NodeID) {
 		var poolTx *core.PoolTx
 		if n.NodeInfo.NodeAddr == oldComLeaderAddr {
-			poolTx = n.com.HandleGetPoolTx(nil)
+			poolTx = n.com.HandleGetPoolTx()
 			n.com.SetPoolTx(poolTx)
 		} else {
 			getPoolTxsCh := make(chan struct{}, 1)
@@ -248,12 +248,12 @@ func (n *Node) EndReconfig(newCom2Results map[uint32][]*core.ReconfigResult, old
 		switch n.reconfigMode {
 		case "lesssync": // 存储共识分离，只需同步交易池
 			n.lessSync(sizeofPoolTx, syncStartTime)
-		case "fullsync":
-			n.fullsync(sizeofPoolTx, syncStartTime)
-		case "fastsync":
-			n.fastsync(sizeofPoolTx, syncStartTime)
-		case "tMPTsync":
-			n.tMPTsync(sizeofPoolTx, syncStartTime)
+		//case "fullsync":
+		//	n.fullsync(sizeofPoolTx, syncStartTime)
+		//case "fastsync":
+		//	n.fastsync(sizeofPoolTx, syncStartTime)
+		//case "tMPTsync":
+		//	n.tMPTsync(sizeofPoolTx, syncStartTime)
 		default:
 			log.Error("unknown reconfig mode", "mode", n.reconfigMode)
 		}
@@ -265,7 +265,7 @@ func (n *Node) EndReconfig(newCom2Results map[uint32][]*core.ReconfigResult, old
 	}
 
 	if utils.IsComLeader(n.NodeInfo.NodeID) {
-		n.com.StartWorker()
+		n.com.WorkerStart()
 	}
 
 	// 删除无用的长连接，释放系统资源，防止某些端口被强制关闭
@@ -274,96 +274,96 @@ func (n *Node) EndReconfig(newCom2Results map[uint32][]*core.ReconfigResult, old
 	// todo
 }
 
-func (n *Node) lessSync(sizeofPoolTx int, syncStartTime time.Time) {
+func (n *EthNode) lessSync(sizeofPoolTx int, syncStartTime time.Time) {
 	elapsed := time.Since(syncStartTime)
 	reportMsg := fmt.Sprintf("shardID: %d msgType: %s sizeof states(bytes): %d sizeof blocks(bytes): %d sizeof poolTx(bytes): %d sync time: %d",
 		n.NodeInfo.ComID, "lesssync", 0, 0, sizeofPoolTx, elapsed.Milliseconds())
 	n.messageHub.Send(core.MsgTypeReportAny, 0, reportMsg, nil)
 }
 
-func (n *Node) tMPTsync(sizeofPoolTx int, syncStartTime time.Time) {
-	shardLeader := cfg.NodeTable[n.NodeInfo.ComID][0]
-	request := &core.GetSyncData{
-		ServerAddr: shardLeader,
-		ClientAddr: n.NodeInfo.NodeAddr,
-		ShardID:    n.NodeInfo.ComID,
-		SyncType:   "tMPTsync",
-	}
-	var data *core.SyncData
-	if n.NodeInfo.NodeAddr == shardLeader {
-		data = n.shard.HandleGetSyncData(request)
-	} else {
-		getSyncDataCh := make(chan struct{}, 1)
-		callback := func(res ...interface{}) {
-			data = res[0].(*core.SyncData)
-			log.Debug("tMPTsync data received", "len(states)", len(data.States), "len(blocks)", len(data.Blocks))
-			getSyncDataCh <- struct{}{}
-		}
-		n.messageHub.Send(core.MsgTypeGetSyncData, n.NodeInfo.ComID, request, callback)
-		// 等待交易池更新后再启动worker
-		<-getSyncDataCh
-	}
-
-	elapsed := time.Since(syncStartTime)
-	reportMsg := fmt.Sprintf("shardID: %d msgType: %s sizeof states(bytes): %d sizeof blocks(bytes): %d sizeof poolTx(bytes): %d sync time: %d",
-		n.NodeInfo.ComID, "tMPTsync", len(utils.EncodeAny(data.States)), len(utils.EncodeAny(data.Blocks)), sizeofPoolTx, elapsed.Milliseconds())
-	n.messageHub.Send(core.MsgTypeReportAny, 0, reportMsg, nil)
-}
-
-func (n *Node) fullsync(sizeofPoolTx int, syncStartTime time.Time) {
-	shardLeader := cfg.NodeTable[n.NodeInfo.ComID][0]
-	request := &core.GetSyncData{
-		ServerAddr: shardLeader,
-		ClientAddr: n.NodeInfo.NodeAddr,
-		ShardID:    n.NodeInfo.ComID,
-		SyncType:   "fullsync",
-	}
-	var data *core.SyncData
-	if n.NodeInfo.NodeAddr == shardLeader {
-		data = n.shard.HandleGetSyncData(request)
-	} else {
-		getSyncDataCh := make(chan struct{}, 1)
-		callback := func(res ...interface{}) {
-			data = res[0].(*core.SyncData)
-			log.Debug("fullsync data received", "len(states)", len(data.States), "len(blocks)", len(data.Blocks))
-			getSyncDataCh <- struct{}{}
-		}
-		n.messageHub.Send(core.MsgTypeGetSyncData, n.NodeInfo.ComID, request, callback)
-		// 等待交易池更新后再启动worker
-		<-getSyncDataCh
-	}
-
-	elapsed := time.Since(syncStartTime)
-	reportMsg := fmt.Sprintf("shardID: %d msgType: %s sizeof states(bytes): %d sizeof blocks(bytes): %d sizeof poolTx(bytes): %d sync time: %d",
-		n.NodeInfo.ComID, "fullsync", len(utils.EncodeAny(data.States)), len(utils.EncodeAny(data.Blocks)), sizeofPoolTx, elapsed.Milliseconds())
-	n.messageHub.Send(core.MsgTypeReportAny, 0, reportMsg, nil)
-}
-
-func (n *Node) fastsync(sizeofPoolTx int, syncStartTime time.Time) {
-	shardLeader := cfg.NodeTable[n.NodeInfo.ComID][0]
-	request := &core.GetSyncData{
-		ServerAddr: shardLeader,
-		ClientAddr: n.NodeInfo.NodeAddr,
-		ShardID:    n.NodeInfo.ComID,
-		SyncType:   "fastsync",
-	}
-	var data *core.SyncData
-	if n.NodeInfo.NodeAddr == shardLeader {
-		data = n.shard.HandleGetSyncData(request)
-	} else {
-		getSyncDataCh := make(chan struct{}, 1)
-		callback := func(res ...interface{}) {
-			data = res[0].(*core.SyncData)
-			log.Debug("fastsync data received", "len(states)", len(data.States), "len(blocks)", len(data.Blocks))
-			getSyncDataCh <- struct{}{}
-		}
-		n.messageHub.Send(core.MsgTypeGetSyncData, n.NodeInfo.ComID, request, callback)
-		// 等待交易池更新后再启动worker
-		<-getSyncDataCh
-	}
-
-	elapsed := time.Since(syncStartTime)
-	reportMsg := fmt.Sprintf("shardID: %d msgType: %s sizeof states(bytes): %d sizeof blocks(bytes): %d sizeof poolTx(bytes): %d sync time: %d",
-		n.NodeInfo.ComID, "fastsync", len(utils.EncodeAny(data.States)), len(utils.EncodeAny(data.Blocks)), sizeofPoolTx, elapsed.Milliseconds())
-	n.messageHub.Send(core.MsgTypeReportAny, 0, reportMsg, nil)
-}
+//func (n *Node) tMPTsync(sizeofPoolTx int, syncStartTime time.Time) {
+//	shardLeader := cfg.NodeTable[n.NodeInfo.ComID][0]
+//	request := &core.GetSyncData{
+//		ServerAddr: shardLeader,
+//		ClientAddr: n.NodeInfo.NodeAddr,
+//		ShardID:    n.NodeInfo.ComID,
+//		SyncType:   "tMPTsync",
+//	}
+//	var data *core.SyncData
+//	if n.NodeInfo.NodeAddr == shardLeader {
+//		data = n.shard.HandleGetSyncData(request)
+//	} else {
+//		getSyncDataCh := make(chan struct{}, 1)
+//		callback := func(res ...interface{}) {
+//			data = res[0].(*core.SyncData)
+//			log.Debug("tMPTsync data received", "len(states)", len(data.States), "len(blocks)", len(data.Blocks))
+//			getSyncDataCh <- struct{}{}
+//		}
+//		n.messageHub.Send(core.MsgTypeGetSyncData, n.NodeInfo.ComID, request, callback)
+//		// 等待交易池更新后再启动worker
+//		<-getSyncDataCh
+//	}
+//
+//	elapsed := time.Since(syncStartTime)
+//	reportMsg := fmt.Sprintf("shardID: %d msgType: %s sizeof states(bytes): %d sizeof blocks(bytes): %d sizeof poolTx(bytes): %d sync time: %d",
+//		n.NodeInfo.ComID, "tMPTsync", len(utils.EncodeAny(data.States)), len(utils.EncodeAny(data.Blocks)), sizeofPoolTx, elapsed.Milliseconds())
+//	n.messageHub.Send(core.MsgTypeReportAny, 0, reportMsg, nil)
+//}
+//
+//func (n *Node) fullsync(sizeofPoolTx int, syncStartTime time.Time) {
+//	shardLeader := cfg.NodeTable[n.NodeInfo.ComID][0]
+//	request := &core.GetSyncData{
+//		ServerAddr: shardLeader,
+//		ClientAddr: n.NodeInfo.NodeAddr,
+//		ShardID:    n.NodeInfo.ComID,
+//		SyncType:   "fullsync",
+//	}
+//	var data *core.SyncData
+//	if n.NodeInfo.NodeAddr == shardLeader {
+//		data = n.shard.HandleGetSyncData(request)
+//	} else {
+//		getSyncDataCh := make(chan struct{}, 1)
+//		callback := func(res ...interface{}) {
+//			data = res[0].(*core.SyncData)
+//			log.Debug("fullsync data received", "len(states)", len(data.States), "len(blocks)", len(data.Blocks))
+//			getSyncDataCh <- struct{}{}
+//		}
+//		n.messageHub.Send(core.MsgTypeGetSyncData, n.NodeInfo.ComID, request, callback)
+//		// 等待交易池更新后再启动worker
+//		<-getSyncDataCh
+//	}
+//
+//	elapsed := time.Since(syncStartTime)
+//	reportMsg := fmt.Sprintf("shardID: %d msgType: %s sizeof states(bytes): %d sizeof blocks(bytes): %d sizeof poolTx(bytes): %d sync time: %d",
+//		n.NodeInfo.ComID, "fullsync", len(utils.EncodeAny(data.States)), len(utils.EncodeAny(data.Blocks)), sizeofPoolTx, elapsed.Milliseconds())
+//	n.messageHub.Send(core.MsgTypeReportAny, 0, reportMsg, nil)
+//}
+//
+//func (n *Node) fastsync(sizeofPoolTx int, syncStartTime time.Time) {
+//	shardLeader := cfg.NodeTable[n.NodeInfo.ComID][0]
+//	request := &core.GetSyncData{
+//		ServerAddr: shardLeader,
+//		ClientAddr: n.NodeInfo.NodeAddr,
+//		ShardID:    n.NodeInfo.ComID,
+//		SyncType:   "fastsync",
+//	}
+//	var data *core.SyncData
+//	if n.NodeInfo.NodeAddr == shardLeader {
+//		data = n.shard.HandleGetSyncData(request)
+//	} else {
+//		getSyncDataCh := make(chan struct{}, 1)
+//		callback := func(res ...interface{}) {
+//			data = res[0].(*core.SyncData)
+//			log.Debug("fastsync data received", "len(states)", len(data.States), "len(blocks)", len(data.Blocks))
+//			getSyncDataCh <- struct{}{}
+//		}
+//		n.messageHub.Send(core.MsgTypeGetSyncData, n.NodeInfo.ComID, request, callback)
+//		// 等待交易池更新后再启动worker
+//		<-getSyncDataCh
+//	}
+//
+//	elapsed := time.Since(syncStartTime)
+//	reportMsg := fmt.Sprintf("shardID: %d msgType: %s sizeof states(bytes): %d sizeof blocks(bytes): %d sizeof poolTx(bytes): %d sync time: %d",
+//		n.NodeInfo.ComID, "fastsync", len(utils.EncodeAny(data.States)), len(utils.EncodeAny(data.Blocks)), sizeofPoolTx, elapsed.Milliseconds())
+//	n.messageHub.Send(core.MsgTypeReportAny, 0, reportMsg, nil)
+//}

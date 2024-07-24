@@ -3,8 +3,8 @@ package controller
 import (
 	"go-w3chain/beaconChain"
 	"go-w3chain/client"
+	"go-w3chain/eth_node"
 	"go-w3chain/log"
-	"go-w3chain/node"
 	"go-w3chain/result"
 	"math"
 	"time"
@@ -12,7 +12,7 @@ import (
 
 var tbChain *beaconChain.BeaconChain
 
-func startNode(node *node.Node) {
+func startNode(node *eth_node.EthNode) {
 	node.Start()
 }
 
@@ -24,7 +24,7 @@ func startClient(c *client.Client, injectSpeed int, recommitIntervalSecs int) {
  * 判断委员会能否停止, 若能则停止
  * 循环打印交易总执行进度
  */
-func toStopCommittee(node *node.Node, recommitIntervalSecs,
+func toStopCommittee(node *eth_node.EthNode, recommitIntervalSecs,
 	logProgressInterval int, isLogProgress bool, exitMode int) {
 	log.Info("Monitor txpools and try to stop shards")
 	sleepSecs := int(math.Ceil(float64(recommitIntervalSecs) / 2))
@@ -39,13 +39,12 @@ func toStopCommittee(node *node.Node, recommitIntervalSecs,
 	for {
 		canStop := false
 		if exitMode == 0 {
-			canStop = node.GetCommittee().CanStopV1()
+			canStop = node.GetShard().CanStopV1()
 		} else if exitMode == 1 {
-			canStop = node.GetCommittee().CanStopV2()
+			canStop = node.GetShard().CanStopV2()
 		}
 
 		if canStop {
-			node.GetCommittee().Close()
 			node.GetShard().Close()
 			break
 		}
@@ -103,7 +102,11 @@ func toStopClient(c *client.Client, recommitIntervalSecs,
 	}
 }
 
-func closeNode(node *node.Node) {
+//func closeNode(node *node.Node) {
+//	node.Close()
+//}
+
+func closeEthNode(node *eth_node.EthNode) {
 	node.Close()
 }
 

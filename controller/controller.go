@@ -7,13 +7,12 @@ import (
 	beaconchain "go-w3chain/beaconChain"
 	"go-w3chain/cfg"
 	"go-w3chain/client"
-	"go-w3chain/committee"
 	"go-w3chain/core"
 	"go-w3chain/data"
+	"go-w3chain/eth_node"
+	"go-w3chain/eth_shard"
 	"go-w3chain/log"
 	"go-w3chain/messageHub"
-	"go-w3chain/node"
-	"go-w3chain/shard"
 	"go-w3chain/utils"
 	"os"
 	"sync"
@@ -139,13 +138,13 @@ func runNode(allCfg *cfg.Cfg) {
 	// 	}
 	// }
 	// 创建节点
-	node := node.NewNode(dataDir, allCfg.ShardNum, shardId, comId, nodeId, allCfg.ShardSize, allCfg.ComAllNodeNum, allCfg.ReconfigMode)
-	defer closeNode(node)
+	node := eth_node.NewNode(dataDir, allCfg.ShardNum, shardId, comId, nodeId, allCfg.ShardSize, allCfg.ReconfigMode)
+	defer closeEthNode(node)
 
 	// TODO：建立分片内连接
 
 	// 创建本节点对应的分片实例，用于执行分片的操作
-	shard := shard.NewShard(uint32(shardId), node, allCfg.FastsyncBlockNum, allCfg.Height2Reconfig)
+	shard := eth_shard.ExecutionInitialize(uint32(shardId), node, allCfg.Height2Reconfig)
 	node.SetShard(shard)
 
 	// 初始化分片中的账户状态
@@ -163,8 +162,8 @@ func runNode(allCfg *cfg.Cfg) {
 		Height2Reconfig:      allCfg.Height2Reconfig,
 		MultiSignRequiredNum: allCfg.MultiSignRequiredNum,
 	}
-	com := committee.NewCommittee(uint32(allCfg.ShardId), allCfg.ClientNum, node, committeeConfig)
-	node.SetCommittee(com)
+	com := shard.ConsensusInitialize(uint32(allCfg.ShardId), allCfg.ClientNum, node, committeeConfig)
+	node.SetShard(com)
 
 	// 初始化信标链接口
 	beaconChainConfig := &core.BeaconChainConfig{
@@ -211,7 +210,7 @@ func runBooterNode(allCfg *cfg.Cfg) {
 	tbChain = beaconchain.NewTBChain(beaconChainConfig, allCfg.ShardNum)
 	defer stopTBChain()
 
-	booter := node.NewBooter()
+	booter := eth_node.NewBooter()
 	booter.SetTBchain(tbChain)
 
 	var wg sync.WaitGroup
@@ -262,7 +261,7 @@ func Main(cfgfilename string, role string, shardNum, shardID, nodeID int32) {
 
 	switch role {
 	case "client":
-		runClient(cfg)
+		runEthClient(cfg)
 	case "node":
 		runNode(cfg)
 	case "booter":

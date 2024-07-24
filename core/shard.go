@@ -1,24 +1,32 @@
 package core
 
-import (
-	"math/big"
-
-	"github.com/ethereum/go-ethereum/common"
-)
+import "github.com/ethereum/go-ethereum/common"
 
 type Shard interface {
-	GetShardID() uint32
-	GetBlockChain() *BlockChain
-	GetChainHeight() uint64
-
-	SetInitialAccountState(map[common.Address]struct{}, *big.Int)
-	AddInitialAddr(addr common.Address, nodeID uint32)
-	GetNodeAddrs() []common.Address
+	//GetShardID() uint32
+	//GetBlockChain() *BlockChain
+	//GetChainHeight() uint64
+	//
+	//SetInitialAccountState(map[common.Address]struct{}, *big.Int)
+	//AddInitialAddr(addr common.Address, nodeID uint32)
+	//GetNodeAddrs() []common.Address
 	AddBlock(*Block)
-	HandleGetSyncData(*GetSyncData) *SyncData
+	//HandleGetSyncData(*GetSyncData) *SyncData
 
 	SetMessageHub(MessageHub)
 
 	Start()
 	Close()
+	CanStopV1() bool
+	CanStopV2() bool
+	ConsensusStart(id uint32)
+	WorkerStart()
+	SetOldTxPool()
+	UpdateTbChainHeight(height uint64)
+	AdjustRecordedAddrs(addrs []common.Address, vrfs [][]byte, height uint64)
+	SetPoolTx(tx *PoolTx)
+	HandleGetPoolTx() *PoolTx
+
+	AddInitialAddr(common.Address, uint32)
+	GetNodeAddrs() []common.Address
 }

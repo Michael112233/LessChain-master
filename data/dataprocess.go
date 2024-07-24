@@ -8,6 +8,7 @@ import (
 	"encoding/csv"
 	"go-w3chain/client"
 	"go-w3chain/core"
+	"go-w3chain/eth_shard"
 	"go-w3chain/log"
 	"go-w3chain/result"
 	"go-w3chain/utils"
@@ -102,7 +103,7 @@ func SetTxShardId(shardNum int) {
 /**
  * 提前设置分片中的账户状态（金额）
  */
-func SetShardInitialAccountState(shard core.Shard) {
+func SetShardInitialAccountState(shard *eth_shard.Shard) {
 	addrs := make(map[common.Address]struct{}, 0)
 	shardId := shard.GetShardID()
 

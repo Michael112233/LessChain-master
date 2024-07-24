@@ -2,6 +2,7 @@ package eth_node
 
 import (
 	"fmt"
+	"github.com/ethereum/go-ethereum/core/state"
 	"go-w3chain/cfg"
 	"go-w3chain/core"
 	"go-w3chain/eth_chain"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -18,7 +20,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 )
 
-type Node struct {
+type EthNode struct {
 	NodeInfo         *core.NodeInfo
 	nodeSendInfoLock sync.Mutex
 
@@ -35,8 +37,8 @@ type Node struct {
 	//shard         core.Shard
 	//shardNum      int
 	committeeNum  int
-	committeeSize int // 委员会中所有节点，包括共识节点和非共识节点
-	com           core.Committee
+	CommitteeSize int // 委员会中所有节点，包括共识节点和非共识节点
+	com           core.Shard
 
 	/* 节点上一次运行vrf得到的结果 */
 	VrfValue []byte
@@ -52,20 +54,23 @@ type Node struct {
 	reconfigResult      *core.ReconfigResult                // 本节点的重组结果
 	reconfigResults     []*core.ReconfigResult              // 本委员会所有节点的重组结果
 	com2ReconfigResults map[uint32]*core.ComReconfigResults // 所有委员会的节点的重组结果
+
+	currentState *state.StateDB
+	activeAddrs  map[common.Address]int
 }
 
-func NewNode(parentdataDir string, committeeNum, shardID, comID, nodeID, committeeSize int, reconfigMode string) *Node {
+func NewNode(parentdataDir string, committeeNum, shardID, comID, nodeID, committeeSize int, reconfigMode string) *EthNode {
 	nodeInfo := &core.NodeInfo{
 		ShardID:  uint32(shardID),
 		ComID:    uint32(comID),
 		NodeID:   uint32(nodeID),
 		NodeAddr: cfg.ComNodeTable[uint32(shardID)][uint32(nodeID)],
 	}
-	node := &Node{
+	node := &EthNode{
 		DataDir:       filepath.Join(parentdataDir, fmt.Sprintf("S%dN%d", shardID, nodeID)),
 		committeeNum:  committeeNum,
 		NodeInfo:      nodeInfo,
-		committeeSize: committeeSize,
+		CommitteeSize: committeeSize,
 		reconfigMode:  reconfigMode,
 	}
 
@@ -84,16 +89,16 @@ func NewNode(parentdataDir string, committeeNum, shardID, comID, nodeID, committ
 	return node
 }
 
-func (node *Node) SetMessageHub(hub core.MessageHub) {
+func (node *EthNode) SetMessageHub(hub core.MessageHub) {
 	node.messageHub = hub
 }
 
-func (node *Node) Start() {
-	node.com.Start(node.NodeInfo.NodeID)
+func (node *EthNode) Start() {
+	node.com.ConsensusStart(node.NodeInfo.NodeID)
 	node.sendNodeInfo()
 }
 
-func (node *Node) sendNodeInfo() {
+func (node *EthNode) sendNodeInfo() {
 	if utils.IsComLeader(node.NodeInfo.NodeID) {
 		return
 	}
@@ -105,7 +110,7 @@ func (node *Node) sendNodeInfo() {
 	node.messageHub.Send(core.MsgTypeNodeSendInfo2Leader, node.NodeInfo.ComID, info, nil)
 }
 
-func (node *Node) RunPbft(block *core.Block, exit chan struct{}) {
+func (node *EthNode) RunPbft(block *core.Block, exit chan struct{}) {
 	node.pbftNode.SetSequenceID(block.NumberU64())
 	node.pbftNode.Propose(block)
 	// wait till consensus is complete
@@ -120,44 +125,40 @@ func (node *Node) RunPbft(block *core.Block, exit chan struct{}) {
 
 }
 
-//func (node *Node) SetShard(shard core.Shard) {
-//	node.shard = shard
-//}
-
-func (node *Node) SetCommittee(com core.Committee) {
-	node.com = com
+func (node *EthNode) SetShard(shard core.Shard) {
+	node.com = shard
 }
 
-//func (node *Node) GetShard() core.Shard {
-//	return node.shard
-//}
-
-func (node *Node) GetCommittee() core.Committee {
+func (node *EthNode) GetShard() core.Shard {
 	return node.com
 }
 
-func (node *Node) GetPbftNode() *pbft.PbftConsensusNode {
+//func (node *EthNode) GetCommittee() core.Committee {
+//	return node.com
+//}
+
+func (node *EthNode) GetPbftNode() *pbft.PbftConsensusNode {
 	return node.pbftNode
 }
 
-func (node *Node) Close() {
+func (node *EthNode) Close() {
 	node.CloseDatabase()
 }
 
 // ResolvePath returns the absolute path of a resource in the instance directory.
-func (n *Node) ResolvePath(x string) string {
+func (n *EthNode) ResolvePath(x string) string {
 	return filepath.Join(n.DataDir, x)
 }
 
-func (n *Node) GetDB() ethdb.Database {
+func (n *EthNode) GetDB() ethdb.Database {
 	return n.db
 }
 
-func (n *Node) GetAddr() string {
+func (n *EthNode) GetAddr() string {
 	return n.NodeInfo.NodeAddr
 }
 
-func (n *Node) GetAccount() *W3Account {
+func (n *EthNode) GetAccount() *W3Account {
 	return n.w3Account
 }
 
@@ -171,7 +172,7 @@ func (n *Node) GetAccount() *W3Account {
 //	}
 //}
 
-func (n *Node) HandleBooterSendContract(data *core.BooterSendContract) {
+func (n *EthNode) HandleBooterSendContract(data *core.BooterSendContract) {
 	n.contractAddr = data.Addr
 	contractABI, err := abi.JSON(strings.NewReader(eth_chain.MyContractABI()))
 	if err != nil {
@@ -180,9 +181,14 @@ func (n *Node) HandleBooterSendContract(data *core.BooterSendContract) {
 	n.contractAbi = &contractABI
 	// 启动 worker，满足三个条件： 1.是leader节点；2.收到合约地址；3.和委员会内所有节点建立起联系
 	if utils.IsComLeader(n.NodeInfo.NodeID) {
-		n.com.StartWorker()
+		n.com.WorkerStart()
 	}
 }
+
+//func (n *EthNode) ComGetState() *core.ShardSendState {
+//
+//	return nil
+//}
 
 /*
 	//////////////////////////////////////////////////////////////
@@ -192,7 +198,7 @@ func (n *Node) HandleBooterSendContract(data *core.BooterSendContract) {
 
 // OpenDatabase opens an existing database with the given name (or creates one if no
 // previous can be found) from within the node's instance directory.
-func (n *Node) OpenDatabase(name string, cache, handles int, namespace string, readonly bool) (ethdb.Database, error) {
+func (n *EthNode) OpenDatabase(name string, cache, handles int, namespace string, readonly bool) (ethdb.Database, error) {
 	// namepsace = "", file = /home/pengxiaowen/.brokerChain/xxx/name
 	// cache , handle = 0, readonly = false
 	var err error
@@ -205,10 +211,59 @@ func (n *Node) OpenDatabase(name string, cache, handles int, namespace string, r
 	return n.db, err
 }
 
-func (n *Node) CloseDatabase() {
+func (n *EthNode) CloseDatabase() {
 	err := n.db.Close()
 	if err != nil {
 		log.Error("closeDatabase fail.", "nodeInfo", n.NodeInfo)
 	}
 	// log.Debug("closeDatabase", "nodeID", n.NodeInfo.NodeID)
+}
+
+// execute transactions
+func (n *EthNode) ExecuteTransactions(txs []*core.Transaction) common.Hash {
+	now := time.Now().Unix()
+
+	for _, tx := range txs {
+		n.executeTransaction(tx, n.currentState, now)
+		n.activeAddrs[*tx.Sender] += 1
+		n.activeAddrs[*tx.Recipient] += 1
+	}
+
+	root := n.currentState.IntermediateRoot(false)
+	n.currentState.Commit(false)
+
+	return root
+}
+
+func (n *EthNode) executeTransaction(tx *core.Transaction, stateDB *state.StateDB, now int64) {
+	state := stateDB
+	if tx.TXtype == core.IntraTXType {
+		state.SetNonce(*tx.Sender, state.GetNonce(*tx.Sender)+1)
+		state.SubBalance(*tx.Sender, tx.Value)
+		state.AddBalance(*tx.Recipient, tx.Value)
+	} else if tx.TXtype == core.CrossTXType1 {
+		state.SetNonce(*tx.Sender, state.GetNonce(*tx.Sender)+1)
+		state.SubBalance(*tx.Sender, tx.Value)
+	} else if tx.TXtype == core.CrossTXType2 {
+		state.AddBalance(*tx.Recipient, tx.Value)
+	} else if tx.TXtype == core.RollbackTXType {
+		state.SetNonce(*tx.Sender, state.GetNonce(*tx.Sender)-1)
+		state.AddBalance(*tx.Sender, tx.Value)
+	} else {
+		log.Error("Oops, something wrong! Cannot handle tx type", "cur nodeID", n.GetNodeID(), "type", tx.TXtype, "tx", tx)
+	}
+}
+
+func (n *EthNode) GetNodeID() uint32 {
+	return n.NodeInfo.NodeID
+}
+
+func (n *EthNode) HandleNodeSendInfo(info *core.NodeSendInfo) {
+	n.nodeSendInfoLock.Lock()
+	defer n.nodeSendInfoLock.Unlock()
+
+	n.com.AddInitialAddr(info.Addr, info.NodeInfo.NodeID)
+	if len(n.com.GetNodeAddrs()) == int(n.CommitteeSize) {
+		n.com.Start()
+	}
 }
