@@ -64,7 +64,7 @@ func handleClientSendTx(dataBytes []byte) {
 	}
 
 	log.Info("Msg Received: ClientSendTx", "tx count", len(data))
-	shard_ref.HandleClientSendtx(data)
+	node_ref.HandleClientSendtx(data)
 }
 
 func handleClientSetInjectDone(dataBytes []byte) {

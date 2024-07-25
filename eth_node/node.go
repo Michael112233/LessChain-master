@@ -38,7 +38,11 @@ type EthNode struct {
 	//shardNum      int
 	committeeNum  int
 	CommitteeSize int // 委员会中所有节点，包括共识节点和非共识节点
-	com           core.Shard
+	maxBlockSize  int
+
+	com core.Shard
+
+	txPool *TxPool
 
 	/* 节点上一次运行vrf得到的结果 */
 	VrfValue []byte
@@ -59,7 +63,7 @@ type EthNode struct {
 	activeAddrs  map[common.Address]int
 }
 
-func NewNode(parentdataDir string, committeeNum, shardID, comID, nodeID, committeeSize int, reconfigMode string) *EthNode {
+func NewNode(parentdataDir string, committeeNum, shardID, comID, nodeID, committeeSize, maxBlockSize int, reconfigMode string) *EthNode {
 	nodeInfo := &core.NodeInfo{
 		ShardID:  uint32(shardID),
 		ComID:    uint32(comID),
@@ -70,6 +74,7 @@ func NewNode(parentdataDir string, committeeNum, shardID, comID, nodeID, committ
 		DataDir:       filepath.Join(parentdataDir, fmt.Sprintf("S%dN%d", shardID, nodeID)),
 		committeeNum:  committeeNum,
 		NodeInfo:      nodeInfo,
+		maxBlockSize:  maxBlockSize,
 		CommitteeSize: committeeSize,
 		reconfigMode:  reconfigMode,
 	}
@@ -97,6 +102,7 @@ func (node *EthNode) Start() {
 	node.com.ConsensusStart(node.NodeInfo.NodeID)
 	node.com.Start()
 	node.sendNodeInfo()
+	node.sendTx2Com()
 }
 
 func (node *EthNode) sendNodeInfo() {
@@ -109,6 +115,25 @@ func (node *EthNode) sendNodeInfo() {
 	}
 	log.Debug(fmt.Sprintf("sendNodeInfo... addr: %x", info.Addr))
 	node.messageHub.Send(core.MsgTypeNodeSendInfo2Leader, node.NodeInfo.ComID, info, nil)
+}
+
+func (node *EthNode) sendTx2Com() {
+	for {
+		time.Sleep(1000 * time.Millisecond)
+		txs, _ := node.txPool.Pending(node.maxBlockSize)
+		node.messageHub.Send(core.MsgTypeNodeSendTx2Com, uint32(0), txs, nil)
+		if node.txPool.Empty() {
+			break
+		}
+	}
+}
+
+func (node *EthNode) HandleClientSendtx(txs []*core.Transaction) {
+	log.Debug(fmt.Sprintf("HandleClientSendtx txs=%v", len(txs)))
+	if node.txPool == nil { // 交易池尚未创建，丢弃该交易
+		return
+	}
+	node.txPool.AddTxs(txs)
 }
 
 func (node *EthNode) RunPbft(block *core.Block, exit chan struct{}) {

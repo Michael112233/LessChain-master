@@ -253,9 +253,10 @@ func analyseStates(states *core.ShardSendState) (map[common.Address]*types.State
 func (w *Worker) commit(timestamp int64) (*core.Block, error) {
 	// 获取分片最新的区块高度
 	parentHeight := w.com.getBlockHeight()
-	log.Debug("commit", "parentHeight=", parentHeight)
+	//log.Debug("commit", "parentHeight=", parentHeight)
 	// 从交易池选取交易，排除掉超时的跨分片交易
 	txs, addrs := w.com.txPool.Pending(w.config.MaxBlockSize, parentHeight)
+	//txs, addrs := w.GetPendingTx(w.config.MaxBlockSize, parentHeight)
 	// 从分片获取交易相关账户的状态及证明
 	states := w.com.getStatusFromShard(addrs)
 	log.Debug("commit", "states")

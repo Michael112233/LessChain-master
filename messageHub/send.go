@@ -171,7 +171,8 @@ func shardSendGenesis(msg interface{}) {
 	log.Info("Msg Sent: ShardSendGenesis", "data", data)
 }
 
-func clientInjectTx2Com(comID uint32, msg interface{}) {
+func clientInjectTx2Node(nodeID uint32, msg interface{}) {
+	comID := uint32(0)
 	data := msg.([]*core.Transaction)
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
@@ -184,13 +185,13 @@ func clientInjectTx2Com(comID uint32, msg interface{}) {
 	msg_bytes := packMsg("ClientSendTx", buf.Bytes())
 
 	// 发送给委员会的leader即可
-	addr := cfg.ComNodeTable[comID][0]
+	addr := cfg.ComNodeTable[comID][nodeID]
 	conn, ok := conns2Node.Get(addr)
 	if !ok {
 		conn, err = dial(addr)
 		if err != nil {
-			log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
-				"clientInjectTx2Com", -1, comID, 0, addr))
+			log.Error(fmt.Sprintf("Dial Error. caller: %s targetNodeID: %d  targetNodeID: %d targetAddr: %s",
+				"clientInjectTx2Com", -1, 0, addr))
 		}
 		conns2Node.Add(addr, conn)
 	}
@@ -198,7 +199,7 @@ func clientInjectTx2Com(comID uint32, msg interface{}) {
 	writer.Write(msg_bytes)
 	writer.Flush()
 
-	log.Info("Msg Sent: ClientSendTx", "targetComID", comID, "targetAddr", addr, "tx count", len(data))
+	log.Info("Msg Sent: ClientSendTx", "targetComID", comID, "targetNodeID", nodeID, "targetAddr", addr, "tx count", len(data))
 }
 
 func clientSetInjectDone2Nodes(cid uint32) {
@@ -250,6 +251,35 @@ func clientSetInjectDone2Nodes(cid uint32) {
 			log.Info("Msg Sent: ClientSetInjectDone", "clientID", cid, "shardID", i, "nodeID", j)
 		}
 	}
+}
+
+func comReceiveTxsFromNode(shardID uint32, msg interface{}) {
+	data := msg.(*core.ComGetTx)
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(data)
+	if err != nil {
+		log.Error("gobEncodeErr", "err", err, "data", data)
+	}
+
+	// 序列化后的消息
+	msg_bytes := packMsg("ComGetTx", buf.Bytes())
+
+	addr := cfg.NodeTable[shardID][0]
+	conn, ok := conns2Node.Get(addr)
+	if !ok {
+		conn, err = dial(addr)
+		if err != nil {
+			log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+				"comGetStateFromShard", shardID, -1, 0, addr))
+		}
+		conns2Node.Add(addr, conn)
+	}
+	writer := bufio.NewWriter(conn)
+	writer.Write(msg_bytes)
+	writer.Flush()
+
+	log.Info("Msg Sent: ComGetTx", "len count", len(data.Txs))
 }
 
 func comGetStateFromShard(shardID uint32, msg interface{}) {
@@ -1059,10 +1089,12 @@ func (hub *GoodMessageHub) Send(msgType uint32, id uint32, msg interface{}, call
 	case core.MsgTypeShardSendStateToCom:
 		go shardSendStateToCom(id, msg)
 
-	case core.MsgTypeClientInjectTX2Committee:
-		go clientInjectTx2Com(id, msg)
+	case core.MsgTypeClientInjectTX2Node:
+		go clientInjectTx2Node(id, msg)
 	case core.MsgTypeSetInjectDone2Nodes:
 		clientSetInjectDone2Nodes(id)
+	case core.MsgTypeNodeSendTx2Com:
+		comReceiveTxsFromNode(id, msg)
 
 	case core.MsgTypeSendBlock2Shard:
 		go comSendBlock2Shard(id, msg)

@@ -28,7 +28,8 @@ type Client struct {
 
 	stopCh chan struct{}
 
-	shard_num int
+	shard_num  int
+	shard_size int
 
 	/* 待注入到分片的交易*/
 	txs []*core.Transaction
@@ -78,7 +79,7 @@ type Client struct {
 	wg sync.WaitGroup
 }
 
-func NewClient(addr string, id, rollbackHeight, shardNum int, exitMode int) *Client {
+func NewClient(addr string, id, rollbackHeight, shardNum int, shardSize int, exitMode int) *Client {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		log.Error("invalid node address!", "addr", addr)
@@ -94,6 +95,7 @@ func NewClient(addr string, id, rollbackHeight, shardNum int, exitMode int) *Cli
 		txs_map:                   make(map[uint64]*core.Transaction),
 		tx_reply:                  list.New(),
 		shard_num:                 shardNum,
+		shard_size:                shardSize,
 		cross1_confirm_height_map: make(map[uint64]uint64),
 		tbs:                       make(map[uint32]map[uint64]*beaconChain.ConfirmedTB),
 		shard_cur_heights:         make(map[uint32]uint64),

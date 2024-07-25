@@ -151,6 +151,10 @@ func (s *Shard) SetInitialAccountState(Addrs map[common.Address]struct{}, maxVal
 	}
 }
 
+func (s *Shard) GetStateDB() *state.StateDB {
+	return s.blockchain.GetStateDB()
+}
+
 // 执行交易
 func (s *Shard) executeTransactions(txs []*core.Transaction) common.Hash {
 	log.Debug("execute transactions")
@@ -212,9 +216,9 @@ func (s *Shard) ConsensusInitialize(shardID uint32, clientCnt int, _node *eth_no
 func (s *Shard) ConsensusStart(nodeId uint32) {
 	s.to_reconfig = false
 	if utils.IsComLeader(nodeId) { // 只有委员会的leader节点会运行worker，即出块
-		pool := NewTxPool(s.Node.NodeInfo.ComID)
-		s.txPool = pool
-		pool.setCommittee(s)
+		//pool := NewTxPool(s.Node.NodeInfo.ComID)
+		//s.txPool = pool
+		//pool.setCommittee(s)
 
 		worker := newWorker(s.config)
 		s.worker = worker

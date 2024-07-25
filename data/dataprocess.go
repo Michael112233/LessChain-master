@@ -105,13 +105,13 @@ func SetTxShardId(shardNum int) {
  */
 func SetShardInitialAccountState(shard *eth_shard.Shard) {
 	addrs := make(map[common.Address]struct{}, 0)
-	shardId := shard.GetShardID()
+	shardID := shard.GetShardID()
 
 	for _, tx := range alltxs {
-		if tx.Sender_sid == shardId {
+		if tx.Sender_sid == shardID {
 			addrs[*tx.Sender] = struct{}{}
 		}
-		if tx.Recipient_sid == shardId {
+		if tx.Recipient_sid == shardID {
 			addrs[*tx.Recipient] = struct{}{}
 		}
 	}
@@ -122,7 +122,7 @@ func SetShardInitialAccountState(shard *eth_shard.Shard) {
 
 	shard.SetInitialAccountState(addrs, maxValue)
 
-	log.Info("SetShardsInitialState successed", "shardID", shardId, "# of initial addr", len(addrs))
+	log.Info("SetShardsInitialState successed", "nodeID", shardID, "# of initial addr", len(addrs))
 }
 
 /**

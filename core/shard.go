@@ -1,6 +1,10 @@
 package core
 
-import "github.com/ethereum/go-ethereum/common"
+import (
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/state"
+	"math/big"
+)
 
 type Shard interface {
 	//GetShardID() uint32
@@ -29,4 +33,7 @@ type Shard interface {
 
 	AddInitialAddr(common.Address, uint32)
 	GetNodeAddrs() []common.Address
+
+	GetStateDB() *state.StateDB
+	SetInitialAccountState(map[common.Address]struct{}, *big.Int)
 }

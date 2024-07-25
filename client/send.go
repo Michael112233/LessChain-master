@@ -64,8 +64,8 @@ func (c *Client) sendRollbackTxs(maxTxNum2Pack int) int {
 
 	/* 初始化 shardtxs */
 	shardtxs := make([][]*core.Transaction, c.shard_num)
-	for i := 0; i < c.shard_num; i++ {
-		shardtxs[i] = make([]*core.Transaction, 0, rollbackTxSentCnt*2/c.shard_num+1)
+	for i := 0; i < c.shard_size; i++ {
+		shardtxs[i] = make([]*core.Transaction, 0, rollbackTxSentCnt*2/c.shard_size+1)
 	}
 	for i := 0; i < rollbackTxSentCnt; i++ {
 		txid := c.cross_tx_expired[i]
@@ -75,9 +75,9 @@ func (c *Client) sendRollbackTxs(maxTxNum2Pack int) int {
 		log.Trace("tracing transaction, ", "txid", tx.ID, "status", "client send rollback tx to committee", "time", now)
 		shardtxs[tx.Sender_sid] = append(shardtxs[tx.Sender_sid], &tx)
 	}
-	/* 注入到各分片 */
-	for i := 0; i < c.shard_num; i++ {
-		c.messageHub.Send(core.MsgTypeClientInjectTX2Committee, uint32(i), shardtxs[i], nil)
+	/* 注入到各节点 */
+	for i := 0; i < c.shard_size; i++ {
+		c.messageHub.Send(core.MsgTypeClientInjectTX2Node, uint32(i), shardtxs[i], nil)
 	}
 	// 移除已发送的reply交易
 	c.cross_tx_expired = c.cross_tx_expired[rollbackTxSentCnt:]
@@ -97,17 +97,17 @@ func (c *Client) sendCross2Txs(maxTxNum2Pack int) int {
 
 	/* 初始化 shardtxs */
 	shardtxs := make([][]*core.Transaction, c.shard_num)
-	for i := 0; i < c.shard_num; i++ {
-		shardtxs[i] = make([]*core.Transaction, 0, cross2TxSentCnt*2/c.shard_num+1)
+	for i := 0; i < c.shard_size; i++ {
+		shardtxs[i] = make([]*core.Transaction, 0, cross2TxSentCnt*2/c.shard_size+1)
 	}
 	for i := 0; i < cross2TxSentCnt; i++ {
 		tx := c.cross2_txs[i]
 		log.Trace("tracing transaction, ", "txid", tx.ID, "status", "client send cross2 to committee", "time", now)
 		shardtxs[tx.Recipient_sid] = append(shardtxs[tx.Recipient_sid], tx)
 	}
-	/* 注入到各分片 */
-	for i := 0; i < c.shard_num; i++ {
-		c.messageHub.Send(core.MsgTypeClientInjectTX2Committee, uint32(i), shardtxs[i], nil)
+	/* 注入到各节点 */
+	for i := 0; i < c.shard_size; i++ {
+		c.messageHub.Send(core.MsgTypeClientInjectTX2Node, uint32(i), shardtxs[i], nil)
 	}
 	// 移除已发送的reply交易
 	c.cross2_txs = c.cross2_txs[cross2TxSentCnt:]
@@ -122,9 +122,9 @@ func (c *Client) sendPendingTxs(cnt, maxTxNum2Pack int, resBroadcastMap map[uint
 
 	upperBound := utils.Min(cnt+maxTxNum2Pack, len(c.txs))
 	/* 初始化 shardtxs */
-	shardtxs := make([][]*core.Transaction, c.shard_num)
+	shardtxs := make([][]*core.Transaction, c.shard_size)
 	for i := 0; i < c.shard_num; i++ {
-		shardtxs[i] = make([]*core.Transaction, 0, maxTxNum2Pack*2/c.shard_num+1)
+		shardtxs[i] = make([]*core.Transaction, 0, maxTxNum2Pack*2/c.shard_size+1)
 	}
 
 	now := time.Now().Unix()
@@ -145,11 +145,10 @@ func (c *Client) sendPendingTxs(cnt, maxTxNum2Pack int, resBroadcastMap map[uint
 
 		resBroadcastMap[tx.ID] = tx.Timestamp
 		shardtxs[tx.Sender_sid] = append(shardtxs[tx.Sender_sid], tx)
-
 	}
-	/* 注入到各分片 */
-	for i := 0; i < c.shard_num; i++ {
-		c.messageHub.Send(core.MsgTypeClientInjectTX2Committee, uint32(i), shardtxs[i], nil)
+	/* 注入到各节点 */
+	for i := 0; i < c.shard_size; i++ {
+		c.messageHub.Send(core.MsgTypeClientInjectTX2Node, uint32(i), shardtxs[i], nil)
 	}
 	/* 更新循环变量 */
 	cnt = upperBound

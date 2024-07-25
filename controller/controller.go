@@ -26,7 +26,7 @@ func runClient(allCfg *cfg.Cfg) {
 	cid := allCfg.ClientId
 	addr := cfg.ClientTable[uint32(cid)]
 
-	client := client.NewClient(addr, cid, allCfg.Height2Rollback, allCfg.ShardNum, allCfg.ExitMode)
+	client := client.NewClient(addr, cid, allCfg.Height2Rollback, allCfg.ShardNum, allCfg.ShardSize, allCfg.ExitMode)
 	log.Info("NewClient", "Info", client)
 
 	// 加载交易数据
@@ -78,12 +78,12 @@ func runEthClient(allCfg *cfg.Cfg) {
 	cid := allCfg.ClientId
 	addr := cfg.ClientTable[uint32(cid)]
 
-	client := client.NewClient(addr, cid, allCfg.Height2Rollback, allCfg.ShardNum, allCfg.ExitMode)
+	client := client.NewClient(addr, cid, allCfg.Height2Rollback, allCfg.ShardNum, allCfg.ShardSize, allCfg.ExitMode)
 	log.Info("NewEthClient", "Info", client)
 
 	// 加载交易数据，分配交易到每个节点中
 	data.LoadETHData(allCfg.DatasetDir, allCfg.MaxTxNum)
-	data.SetTxShardId(allCfg.ShardNum)
+	data.SetTxShardId(allCfg.ShardSize)
 
 	// 注入交易到客户端
 	data.SetTX2ClientTable(allCfg.ClientNum)
@@ -138,7 +138,7 @@ func runNode(allCfg *cfg.Cfg) {
 	// 	}
 	// }
 	// 创建节点
-	node := eth_node.NewNode(dataDir, allCfg.ShardNum, shardId, comId, nodeId, allCfg.ShardSize, allCfg.ReconfigMode)
+	node := eth_node.NewNode(dataDir, allCfg.ShardNum, shardId, comId, nodeId, allCfg.ShardSize, allCfg.MaxBlockTXSize, allCfg.ReconfigMode)
 	defer closeEthNode(node)
 
 	// TODO：建立分片内连接
@@ -150,7 +150,7 @@ func runNode(allCfg *cfg.Cfg) {
 	// 初始化分片中的账户状态
 	if utils.IsShardLeader(node.NodeInfo.NodeID) { // 目前不考虑分片重组和节点失败，只有分片leader需要设置初始状态
 		data.LoadETHData(allCfg.DatasetDir, allCfg.MaxTxNum)
-		data.SetTxShardId(allCfg.ShardNum)
+		data.SetTxShardId(allCfg.ShardSize)
 		data.SetShardInitialAccountState(shard)
 	}
 

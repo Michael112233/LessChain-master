@@ -15,9 +15,10 @@ const (
 	MsgTypeShardSendGenesis
 	MsgTypeBooterSendContract
 
-	MsgTypeClientInjectTX2Committee
+	MsgTypeClientInjectTX2Node
 	MsgTypeCommitteeReply2Client
 	MsgTypeSetInjectDone2Nodes
+	MsgTypeNodeSendTx2Com
 	MsgTypeComAddTb2TBChain
 	// MsgTypeCommitteeInitialAddrs
 	MsgTypeComSendNewAddrs

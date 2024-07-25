@@ -1,14 +1,13 @@
-package eth_shard
+package eth_node
 
 /*
-  本地交易: 在本地磁盘存储已发送的交易。这样，本地交易不会丢失，重启节点时可以重新加载到交易池，实时广播出去。
+   本地交易: 在本地磁盘存储已发送的交易。这样，本地交易不会丢失，重启节点时可以重新加载到交易池，实时广播出去。
 */
 
 import (
 	"go-w3chain/core"
 	"go-w3chain/log"
 	"go-w3chain/result"
-	"math/big"
 	"sync"
 	"time"
 
@@ -22,7 +21,7 @@ type TxPool struct {
 
 	pendingRollback []*core.Transaction
 	r_lock          sync.Mutex
-	com             *Shard
+	node            *EthNode
 }
 
 // 该函数仅在重组后同步交易池时被使用
@@ -35,13 +34,13 @@ func (pool *TxPool) SetPendingRollback(txs []*core.Transaction) {
 	pool.pendingRollback = append(txs, pool.pendingRollback...)
 }
 
-func NewTxPool(shardID uint32) *TxPool {
+func NewTxPool(nodeid uint32) *TxPool {
 	pool := &TxPool{}
 	return pool
 }
 
-func (pool *TxPool) setCommittee(com *Shard) {
-	pool.com = com
+func (pool *TxPool) setNode(node *EthNode) {
+	pool.node = node
 }
 
 /* 重置交易池，返回新的交易池 */
@@ -54,14 +53,14 @@ func (pool *TxPool) Reset() *TxPool {
 		table[tx.ID] = &result.TXReceipt{
 			TxID:     tx.ID,
 			TxStatus: tx.TXStatus,
-			ShardID:  int(pool.com.Node.NodeInfo.ComID),
+			ShardID:  int(pool.node.NodeInfo.ShardID),
 		}
 	}
 	result.SetTXReceiptV2(table)
 
 	// 生成新的交易池
-	newpool := NewTxPool(pool.com.Node.NodeInfo.ComID)
-	newpool.setCommittee(pool.com)
+	newpool := NewTxPool(pool.node.NodeInfo.NodeID)
+	newpool.setNode(pool.node)
 	return newpool
 }
 
@@ -97,11 +96,11 @@ func (pool *TxPool) AddTxs(txs []*core.Transaction) {
 	}
 	// log.Debug("44444")
 
-	log.Debug("TxPoolAddTXs", "comID", pool.com.Node.NodeInfo.ComID, "txPoolPendingLen", pool.PendingLen(), "txPoolPendingRollbackLen", pool.PendingRollbackLen())
+	log.Debug("TxPoolAddTXs", "nodeID", pool.node.NodeInfo.NodeID, "txPoolPendingLen", pool.PendingLen(), "txPoolPendingRollbackLen", pool.PendingRollbackLen())
 }
 
 /* worker.commitTransaction 从队列取出交易 */
-func (pool *TxPool) Pending(maxBlockSize int, parentBlockHeight *big.Int) ([]*core.Transaction, []common.Address) {
+func (pool *TxPool) Pending(maxBlockSize int) ([]*core.Transaction, []common.Address) {
 	/* 需要对lock和r_lock都加锁的场景，都按照先lock再r_lock的顺序，避免死锁 */
 	pool.lock.Lock()
 	defer pool.lock.Unlock()
@@ -138,15 +137,14 @@ func (pool *TxPool) Pending(maxBlockSize int, parentBlockHeight *big.Int) ([]*co
 			// log.Debug(fmt.Sprintf("txpool selecting cross2 tx... txid: %d shard cur height: %d cross1ConfirmHeight: %d rollbackHeight: %d",
 			// 	tx.ID, parentBlockHeight.Uint64(), tx.Cross1ConfirmHeight, tx.RollbackHeight))
 			// 如果新区块高度超过回滚高度，则丢弃交易
-			if parentBlockHeight.Uint64()+1 > tx.Cross1ConfirmHeight+tx.RollbackHeight {
-				// log.Debug(fmt.Sprintf("tx has expired. txid: %d shard cur height: %d cross1ConfirmHeight: %d rollbackHeight: %d",
-				// 	tx.ID, parentBlockHeight.Uint64(), tx.Cross1ConfirmHeight, tx.RollbackHeight))
-				// 如果cross2交易已超时，不会选择该交易进行打包，队列指针后移时需要将maxBlockSize也+1
-				i++
-				maxBlockSize++
-				log.Trace("tracing transaction", "txid", tx.ID, "status", result.GetStatusString(result.CrossTXType2Fail), "time", now)
-				continue
-			}
+
+			// log.Debug(fmt.Sprintf("tx has expired. txid: %d shard cur height: %d cross1ConfirmHeight: %d rollbackHeight: %d",
+			// 	tx.ID, parentBlockHeight.Uint64(), tx.Cross1ConfirmHeight, tx.RollbackHeight))
+			// 如果cross2交易已超时，不会选择该交易进行打包，队列指针后移时需要将maxBlockSize也+1
+			i++
+			maxBlockSize++
+			log.Trace("tracing transaction", "txid", tx.ID, "status", result.GetStatusString(result.CrossTXType2Fail), "time", now)
+			continue
 		}
 		txs = append(txs, tx)
 		i++

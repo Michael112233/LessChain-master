@@ -55,6 +55,11 @@ type ClientSetInjectDone struct {
 	Cid uint32
 }
 
+type ComGetTx struct {
+	From_nodeID uint32
+	Txs         []*Transaction
+}
+
 type ComLeaderInitMultiSign struct {
 	Seed       common.Hash
 	SeedHeight uint64
@@ -123,9 +128,9 @@ type PoolTx struct {
 	PendingRollback []*Transaction
 }
 
-//////////////////////////////
-////// pbft module ///////
-//////////////////////////////
+// ////////////////////////////
+// //// pbft module ///////
+// ////////////////////////////
 type NodeInfo struct {
 	ShardID  uint32
 	ComID    uint32
