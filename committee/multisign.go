@@ -1,18 +1,18 @@
-package eth_shard
+package committee
 
 import (
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
 	"go-w3chain/core"
-	"go-w3chain/eth_node"
 	"go-w3chain/log"
+	"go-w3chain/node"
+
+	"github.com/ethereum/go-ethereum/common"
 )
 
-/*
-* 委员会中的节点对信标进行多签名
+/** 委员会中的节点对信标进行多签名
 由委员会的leader发起
 */
-func (s *Shard) initMultiSign(tb *core.TimeBeacon, seed common.Hash, height uint64) *core.SignedTB {
+func (com *Committee) initMultiSign(tb *core.TimeBeacon, seed common.Hash, height uint64) *core.SignedTB {
 	// 发送消息
 	r := &core.ComLeaderInitMultiSign{
 		Seed:       seed,
@@ -20,34 +20,34 @@ func (s *Shard) initMultiSign(tb *core.TimeBeacon, seed common.Hash, height uint
 		Tb:         tb,
 	}
 
-	s.multiSignData.Signers = make([]common.Address, 0)
-	s.multiSignData.Sigs = make([][]byte, 0)
-	s.multiSignData.Vrfs = make([][]byte, 0)
-	s.multiSignData.MultiSignDone = make(chan struct{}, 1)
-	s.messageHub.Send(core.MsgTypeLeaderInitMultiSign, s.Node.NodeInfo.ComID, r, nil)
+	com.multiSignData.Signers = make([]common.Address, 0)
+	com.multiSignData.Sigs = make([][]byte, 0)
+	com.multiSignData.Vrfs = make([][]byte, 0)
+	com.multiSignData.MultiSignDone = make(chan struct{}, 1)
+	com.messageHub.Send(core.MsgTypeLeaderInitMultiSign, com.Node.NodeInfo.ComID, r, nil)
 	// 等待多签名完成
 	select {
-	case <-s.multiSignData.MultiSignDone:
+	case <-com.multiSignData.MultiSignDone:
 		break
-	case <-s.worker.exitCh:
-		s.worker.exitCh <- struct{}{}
+	case <-com.worker.exitCh:
+		com.worker.exitCh <- struct{}{}
 		break
 	}
 
 	return &core.SignedTB{
 		TimeBeacon: *tb,
-		Signers:    s.multiSignData.Signers,
-		Sigs:       s.multiSignData.Sigs,
-		Vrfs:       s.multiSignData.Vrfs,
+		Signers:    com.multiSignData.Signers,
+		Sigs:       com.multiSignData.Sigs,
+		Vrfs:       com.multiSignData.Vrfs,
 		SeedHeight: height,
 	}
 }
 
-func (s *Shard) HandleMultiSignRequest(request *core.ComLeaderInitMultiSign) {
+func (com *Committee) HandleMultiSignRequest(request *core.ComLeaderInitMultiSign) {
 	seed := request.Seed
 	tb := request.Tb
 
-	account := s.Node.GetAccount()
+	account := com.Node.GetAccount()
 
 	vrf := account.GenerateVRFOutput(seed[:])
 	if !vrfResultIsGood(vrf.RandomValue) {
@@ -59,13 +59,13 @@ func (s *Shard) HandleMultiSignRequest(request *core.ComLeaderInitMultiSign) {
 		PubAddress: *account.GetAccountAddress(),
 		Sig:        account.SignHash(tb.Hash()),
 		VrfValue:   vrf.RandomValue,
-		NodeInfo:   s.Node.GetPbftNode().NodeInfo,
+		NodeInfo:   com.Node.GetPbftNode().NodeInfo,
 	}
 
-	s.messageHub.Send(core.MsgTypeSendMultiSignReply, s.Node.NodeInfo.ComID, reply, nil)
+	com.messageHub.Send(core.MsgTypeSendMultiSignReply, com.Node.NodeInfo.ComID, reply, nil)
 }
 
-func (com *Shard) HandleMultiSignReply(reply *core.MultiSignReply) {
+func (com *Committee) HandleMultiSignReply(reply *core.MultiSignReply) {
 	com.multiSignLock.Lock()
 	defer com.multiSignLock.Unlock()
 
@@ -73,7 +73,7 @@ func (com *Shard) HandleMultiSignReply(reply *core.MultiSignReply) {
 		return
 	}
 
-	if !eth_node.VerifySignature(reply.Request.Seed[:], reply.VrfValue, reply.PubAddress) {
+	if !node.VerifySignature(reply.Request.Seed[:], reply.VrfValue, reply.PubAddress) {
 		log.Debug(fmt.Sprintf("vrf verification not pass.. nodeID: %d", reply.NodeInfo.NodeID))
 		return
 	}
@@ -82,7 +82,7 @@ func (com *Shard) HandleMultiSignReply(reply *core.MultiSignReply) {
 		return
 	}
 	tbHash := reply.Request.Tb.Hash()
-	if !eth_node.VerifySignature(tbHash, reply.Sig, reply.PubAddress) {
+	if !node.VerifySignature(tbHash, reply.Sig, reply.PubAddress) {
 		log.Debug(fmt.Sprintf("signature verification not pass.. nodeID: %d", reply.NodeInfo.NodeID))
 		return
 	}
@@ -96,9 +96,7 @@ func (com *Shard) HandleMultiSignReply(reply *core.MultiSignReply) {
 
 }
 
-/*
-	判断一个VRF生成的随机数是否满足条件
-
+/* 判断一个VRF生成的随机数是否满足条件
 该方法需与合约的验证方法一致
 */
 func vrfResultIsGood(val []byte) bool {

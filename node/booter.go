@@ -1,4 +1,4 @@
-package eth_node
+package node
 
 import (
 	"fmt"
@@ -50,11 +50,8 @@ func (booter *Booter) GetAddr() string {
 	return fmt.Sprintf("%s:%d", booter.addrConfig.Host, booter.addrConfig.Port)
 }
 
-/*
-	booter接收各个分片的创世区块信标和初始账户列表
-
-收集齐后部署信标链上的合约，并返回退出booter监听线程的信号
-*/
+/* booter接收各个分片的创世区块信标和初始账户列表
+收集齐后部署信标链上的合约，并返回退出booter监听线程的信号 */
 func (booter *Booter) HandleShardSendGenesis(data *core.ShardSendGenesis) (exit bool) {
 	booter.genesisLock.Lock()
 	defer booter.genesisLock.Unlock()

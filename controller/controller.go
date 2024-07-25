@@ -7,12 +7,13 @@ import (
 	beaconchain "go-w3chain/beaconChain"
 	"go-w3chain/cfg"
 	"go-w3chain/client"
+	"go-w3chain/committee"
 	"go-w3chain/core"
 	"go-w3chain/data"
-	"go-w3chain/eth_node"
-	"go-w3chain/eth_shard"
 	"go-w3chain/log"
 	"go-w3chain/messageHub"
+	"go-w3chain/node"
+	"go-w3chain/shard"
 	"go-w3chain/utils"
 	"os"
 	"sync"
@@ -71,58 +72,7 @@ func runClient(allCfg *cfg.Cfg) {
 	result.PrintTXReceipt()
 	thrput, avlatency, rollbackRate, overloads := result.GetThroughtPutAndLatencyV2()
 	log.Info("GetThroughtPutAndLatency", "thrput", thrput, "avlatency", avlatency, "rollbackRate", rollbackRate, "overloads", overloads)
-}
 
-// 运行以太坊客户端
-func runEthClient(allCfg *cfg.Cfg) {
-	cid := allCfg.ClientId
-	addr := cfg.ClientTable[uint32(cid)]
-
-	client := client.NewClient(addr, cid, allCfg.Height2Rollback, allCfg.ShardNum, allCfg.ExitMode)
-	log.Info("NewEthClient", "Info", client)
-
-	// 加载交易数据，分配交易到每个节点中
-	data.LoadETHData(allCfg.DatasetDir, allCfg.MaxTxNum)
-	data.SetTxShardId(allCfg.ShardNum)
-
-	// 注入交易到客户端
-	data.SetTX2ClientTable(allCfg.ClientNum)
-	data.InjectTX2Client(client)
-
-	client.Print()
-
-	// 初始化信标链接口
-	beaconChainConfig := &core.BeaconChainConfig{
-		Mode:                 allCfg.BeaconChainMode,
-		ChainId:              allCfg.BeaconChainID,
-		Port:                 allCfg.BeaconChainPort,
-		BlockInterval:        allCfg.TbchainBlockIntervalSecs,
-		Height2Confirm:       uint64(allCfg.Height2Confirm),
-		MultiSignRequiredNum: allCfg.MultiSignRequiredNum,
-	}
-	tbChain = beaconchain.NewTBChain(beaconChainConfig, allCfg.ShardNum)
-
-	var wg sync.WaitGroup
-
-	/* 创建消息中心(用于客户端和信标链的交互等) */
-	messageHub := messageHub.NewMessageHub()
-
-	/* 设置各个分片、委员会和客户端、信标链的通信渠道 */
-	messageHub.Init(client, nil, nil, tbChain, 1, allCfg.ShardSize, 0, allCfg.ClientNum, &wg)
-
-	startClient(client, allCfg.InjectSpeed, allCfg.RecommitIntervalSecs)
-	toStopClient(client, allCfg.RecommitIntervalSecs, allCfg.LogProgressInterval,
-		allCfg.IsLogProgress, allCfg.ExitMode)
-
-	stopTBChain()
-	messageHub.Close()
-
-	wg.Wait()
-
-	/* 打印交易执行结果 */
-	result.PrintTXReceipt()
-	thrput, avlatency, rollbackRate, overloads := result.GetThroughtPutAndLatencyV2()
-	log.Info("GetThroughtPutAndLatency", "thrput", thrput, "avlatency", avlatency, "rollbackRate", rollbackRate, "overloads", overloads)
 }
 
 func runNode(allCfg *cfg.Cfg) {
@@ -138,13 +88,13 @@ func runNode(allCfg *cfg.Cfg) {
 	// 	}
 	// }
 	// 创建节点
-	node := eth_node.NewNode(dataDir, allCfg.ShardNum, shardId, comId, nodeId, allCfg.ShardSize, allCfg.ReconfigMode)
-	defer closeEthNode(node)
+	node := node.NewNode(dataDir, allCfg.ShardNum, shardId, comId, nodeId, allCfg.ShardSize, allCfg.ComAllNodeNum, allCfg.ReconfigMode)
+	defer closeNode(node)
 
 	// TODO：建立分片内连接
 
 	// 创建本节点对应的分片实例，用于执行分片的操作
-	shard := eth_shard.ExecutionInitialize(uint32(shardId), node, allCfg.Height2Reconfig)
+	shard := shard.NewShard(uint32(shardId), node, allCfg.FastsyncBlockNum, allCfg.Height2Reconfig)
 	node.SetShard(shard)
 
 	// 初始化分片中的账户状态
@@ -162,8 +112,8 @@ func runNode(allCfg *cfg.Cfg) {
 		Height2Reconfig:      allCfg.Height2Reconfig,
 		MultiSignRequiredNum: allCfg.MultiSignRequiredNum,
 	}
-	com := shard.ConsensusInitialize(uint32(allCfg.ShardId), allCfg.ClientNum, node, committeeConfig)
-	node.SetShard(com)
+	com := committee.NewCommittee(uint32(allCfg.ShardId), allCfg.ClientNum, node, committeeConfig)
+	node.SetCommittee(com)
 
 	// 初始化信标链接口
 	beaconChainConfig := &core.BeaconChainConfig{
@@ -210,7 +160,7 @@ func runBooterNode(allCfg *cfg.Cfg) {
 	tbChain = beaconchain.NewTBChain(beaconChainConfig, allCfg.ShardNum)
 	defer stopTBChain()
 
-	booter := eth_node.NewBooter()
+	booter := node.NewBooter()
 	booter.SetTBchain(tbChain)
 
 	var wg sync.WaitGroup
@@ -261,13 +211,13 @@ func Main(cfgfilename string, role string, shardNum, shardID, nodeID int32) {
 
 	switch role {
 	case "client":
-		runEthClient(cfg)
+		runClient(cfg)
 	case "node":
 		runNode(cfg)
 	case "booter":
 		runBooterNode(cfg)
 	default:
-		log.Error("unknown roleType in Ethereum", "type", role)
+		log.Error("unknown roleType", "type", role)
 	}
 
 	/* 结束 */

@@ -1,4 +1,4 @@
-package eth_node
+package node
 
 import (
 	"crypto/ecdsa"
@@ -63,9 +63,7 @@ func (w3Account *W3Account) SignHash(hash []byte) []byte {
 	return sig
 }
 
-/*
-	这个方法是被该账户以外的其他账户调用，以验证签名的正确性的
-
+/* 这个方法是被该账户以外的其他账户调用，以验证签名的正确性的
 所以不能直接获取公钥和地址，要从签名中恢复
 */
 func VerifySignature(msgHash []byte, sig []byte, expected_addr common.Address) bool {

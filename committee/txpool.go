@@ -1,7 +1,7 @@
-package eth_shard
+package committee
 
 /*
-   本地交易: 在本地磁盘存储已发送的交易。这样，本地交易不会丢失，重启节点时可以重新加载到交易池，实时广播出去。
+本地交易: 在本地磁盘存储已发送的交易。这样，本地交易不会丢失，重启节点时可以重新加载到交易池，实时广播出去。
 */
 
 import (
@@ -22,7 +22,7 @@ type TxPool struct {
 
 	pendingRollback []*core.Transaction
 	r_lock          sync.Mutex
-	com             *Shard
+	com             *Committee
 }
 
 // 该函数仅在重组后同步交易池时被使用
@@ -40,7 +40,7 @@ func NewTxPool(shardID uint32) *TxPool {
 	return pool
 }
 
-func (pool *TxPool) setCommittee(com *Shard) {
+func (pool *TxPool) setCommittee(com *Committee) {
 	pool.com = com
 }
 

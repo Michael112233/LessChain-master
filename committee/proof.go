@@ -1,4 +1,4 @@
-package eth_shard
+package committee
 
 import (
 	"bytes"

@@ -1,4 +1,4 @@
-package eth_shard
+package shard
 
 import (
 	"fmt"
@@ -28,7 +28,7 @@ func getHash(val []byte) []byte {
 	return hasher.Sum(nil)
 }
 
-func (s *Shard) HandleComGetState(request *core.ComGetState) *core.ShardSendState {
+func (s *Shard) HandleComGetState(request *core.ComGetState) {
 	stateDB := s.blockchain.GetStateDB()
 	// 先看看stateDB中有没有对应账户的节点，没有则先创建节点并更新trie
 	for _, address := range request.AddrList {
@@ -42,7 +42,7 @@ func (s *Shard) HandleComGetState(request *core.ComGetState) *core.ShardSendStat
 	trie, err := trie.NewSecure(root, database)
 	if err != nil {
 		log.Error("trie.NewSecure error", "err", err, "trieRoot", root)
-		return nil
+		return
 	}
 
 	accountsData := make(map[common.Address][]byte)
@@ -84,22 +84,25 @@ func (s *Shard) HandleComGetState(request *core.ComGetState) *core.ShardSendStat
 		Height:         s.blockchain.CurrentBlock().Number(),
 	}
 
-	return response
+	s.messageHub.Send(core.MsgTypeShardSendStateToCom, request.From_comID, response, nil)
 }
 
-func (s *Shard) HandleComGetHeight() *big.Int {
+func (s *Shard) HandleComGetHeight(request *core.ComGetHeight) *big.Int {
 	height := s.blockchain.CurrentBlock().Number()
 	return height
 }
 
-/*
-	分片收到区块后，执行其中的交易，并将得到的状态树根与区块中的状态树根比较
-
+/* 分片收到区块后，执行其中的交易，并将得到的状态树根与区块中的状态树根比较
 若两者相等，说明委员会由merkle proof rebuild得到的树根是正确的
 */
 func (s *Shard) HandleComSendBlock(data *core.ComSendBlock) {
 	block := data.Block
 	s.AddBlock(block)
+
+	// 遇到重组后的第一个信标链，将之前的活跃账户删除
+	if s.tbchain_height%uint64(s.height2Reconfig) == 1 {
+		s.tMPT_activeAddrs = make(map[common.Address]int)
+	}
 
 	trieRoot := s.executeTransactions(block.Transactions)
 	if trieRoot != block.Header.Root {
@@ -136,6 +139,28 @@ func (s *Shard) HandleGetSyncData(data *core.GetSyncData) *core.SyncData {
 			ClientAddr: data.ClientAddr,
 			States:     states,
 			Blocks:     blocks2sync,
+		}
+
+		return syncData
+
+	case "tMPTsync": // 只同步自上一次重组以来的交易中的账户
+		// 状态树
+		states := make(map[common.Address]*types.StateAccount)
+		stateDB := s.blockchain.GetStateDB()
+		for address, _ := range s.tMPT_activeAddrs {
+			accountState := &types.StateAccount{
+				Nonce:    stateDB.GetNonce(address),
+				Balance:  stateDB.GetBalance(address),
+				Root:     emptyRoot,
+				CodeHash: emptyCodeHash,
+			}
+			states[address] = accountState
+		}
+
+		syncData := &core.SyncData{
+			ClientAddr: data.ClientAddr,
+			States:     states,
+			Blocks:     make([]*core.Block, 0),
 		}
 
 		return syncData

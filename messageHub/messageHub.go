@@ -5,23 +5,24 @@ import (
 	"fmt"
 	"go-w3chain/beaconChain"
 	"go-w3chain/client"
+	"go-w3chain/committee"
 	"go-w3chain/core"
-	"go-w3chain/eth_node"
-	"go-w3chain/eth_shard"
 	"go-w3chain/log"
+	"go-w3chain/node"
 	"go-w3chain/pbft"
+	"go-w3chain/shard"
 	"net"
 	"sync"
 )
 
 var (
-	shard_ref *eth_shard.Shard
-	//committee_ref *committee.Committee
-	client_ref   *client.Client
-	node_ref     *eth_node.EthNode
-	pbftNode_ref *pbft.PbftConsensusNode
-	booter_ref   *eth_node.Booter
-	tbChain_ref  *beaconChain.BeaconChain
+	shard_ref     *shard.Shard
+	committee_ref *committee.Committee
+	client_ref    *client.Client
+	node_ref      *node.Node
+	pbftNode_ref  *pbft.PbftConsensusNode
+	booter_ref    *node.Booter
+	tbChain_ref   *beaconChain.BeaconChain
 
 	shardNum      int
 	shardSize     int
@@ -51,15 +52,15 @@ func NewMessageHub() *GoodMessageHub {
 	return hub
 }
 
-func (hub *GoodMessageHub) Init(client *client.Client, node *eth_node.EthNode, booter *eth_node.Booter,
+func (hub *GoodMessageHub) Init(client *client.Client, node *node.Node, booter *node.Booter,
 	tbChain *beaconChain.BeaconChain, _shardNum int, _shardSize, _shardAllNodeNum, _clientNum int, wg *sync.WaitGroup) {
 	clientNum = _clientNum
 	client_ref = client
 
 	node_ref = node
 	if node_ref != nil {
-		shard_ref = node.GetShard().(*eth_shard.Shard)
-		//committee_ref = node.GetCommittee().(*committee.Committee)
+		shard_ref = node.GetShard().(*shard.Shard)
+		committee_ref = node.GetCommittee().(*committee.Committee)
 		pbftNode_ref = node.GetPbftNode()
 	}
 
@@ -70,9 +71,9 @@ func (hub *GoodMessageHub) Init(client *client.Client, node *eth_node.EthNode, b
 	comAllNodeNum = _shardAllNodeNum
 	log.Info("messageHubInit", "shardNum", shardNum)
 
-	//if committee_ref != nil {
-	//	committee_ref.SetMessageHub(hub)
-	//}
+	if committee_ref != nil {
+		committee_ref.SetMessageHub(hub)
+	}
 	if shard_ref != nil {
 		shard_ref.SetMessageHub(hub)
 	}

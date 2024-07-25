@@ -64,7 +64,7 @@ func handleClientSendTx(dataBytes []byte) {
 	}
 
 	log.Info("Msg Received: ClientSendTx", "tx count", len(data))
-	shard_ref.HandleClientSendtx(data)
+	committee_ref.HandleClientSendtx(data)
 }
 
 func handleClientSetInjectDone(dataBytes []byte) {
@@ -79,7 +79,7 @@ func handleClientSetInjectDone(dataBytes []byte) {
 	}
 
 	log.Info("Msg Received: ClientSetInjectDone", "clientID", data.Cid)
-	shard_ref.SetInjectTXDone()
+	committee_ref.SetInjectTXDone(data.Cid)
 }
 
 func handleComGetHeight(dataBytes []byte, conn net.Conn) {
@@ -96,7 +96,7 @@ func handleComGetHeight(dataBytes []byte, conn net.Conn) {
 	log.Info("Msg Received: ComGetHeight", "data", data)
 
 	// 直接通过这个连接回复请求方
-	height := shard_ref.HandleComGetHeight()
+	height := shard_ref.HandleComGetHeight(&data)
 	var buf1 bytes.Buffer
 	encoder := gob.NewEncoder(&buf1)
 	err = encoder.Encode(height)
@@ -133,18 +133,18 @@ func handleComGetState(dataBytes []byte) {
 }
 
 func handleShardSendState(dataBytes []byte) {
-	//var buf bytes.Buffer
-	//buf.Write(dataBytes)
-	//dataDec := gob.NewDecoder(&buf)
-	//
-	//var data core.ShardSendState
-	//err := dataDec.Decode(&data)
-	//if err != nil {
-	//	log.Error("decodeDataErr", "err", err, "dataBytes", data)
-	//}
-	//
-	//log.Info("Msg Received: ShardSendState", "addr count", len(data.AccountData))
-	//shard_ref.HandleShardSendState(&data)
+	var buf bytes.Buffer
+	buf.Write(dataBytes)
+	dataDec := gob.NewDecoder(&buf)
+
+	var data core.ShardSendState
+	err := dataDec.Decode(&data)
+	if err != nil {
+		log.Error("decodeDataErr", "err", err, "dataBytes", data)
+	}
+
+	log.Info("Msg Received: ShardSendState", "addr count", len(data.AccountData))
+	committee_ref.HandleShardSendState(&data)
 }
 
 func handleBooterSendContract(dataBytes []byte) {
@@ -200,7 +200,7 @@ func handleLeaderInitMultiSign(dataBytes []byte) {
 
 	log.Info("Msg Received: LeaderInitMultiSign")
 
-	shard_ref.HandleMultiSignRequest(&data)
+	committee_ref.HandleMultiSignRequest(&data)
 }
 
 func handleMultiSignReply(dataBytes []byte) {
@@ -216,7 +216,7 @@ func handleMultiSignReply(dataBytes []byte) {
 
 	log.Info("Msg Received: MultiSignReply")
 
-	shard_ref.HandleMultiSignReply(&data)
+	committee_ref.HandleMultiSignReply(&data)
 }
 
 //////////////////////////////////////////////////
@@ -260,9 +260,9 @@ func handleShardSendGenesis(dataBytes []byte) (exit bool) {
 	return exit
 }
 
-// ////////////////////////////////////////////////
-// //  pbft module  ////
-// ////////////////////////////////////////////////
+//////////////////////////////////////////////////
+////  pbft module  ////
+//////////////////////////////////////////////////
 func handlePbftMsg(dataBytes []byte, dataType string) {
 	var buf bytes.Buffer
 	buf.Write(dataBytes)
@@ -418,7 +418,7 @@ func handleGetPoolTx(dataBytes []byte, conn net.Conn) {
 	log.Info(fmt.Sprintf("Msg Received: %s", GetPoolTx))
 
 	// 直接通过这个连接回复请求方
-	poolTx := shard_ref.HandleGetPoolTx()
+	poolTx := committee_ref.HandleGetPoolTx(&data)
 	var buf1 bytes.Buffer
 	encoder := gob.NewEncoder(&buf1)
 	err = encoder.Encode(poolTx)

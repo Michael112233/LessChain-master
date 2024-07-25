@@ -398,12 +398,12 @@ func tbChainPushBlock2Client(msg interface{}) {
 }
 
 func tbChainPushBlock2Com(msg interface{}) {
-	if shard_ref == nil {
+	if committee_ref == nil {
 		return
 	}
 	data := msg.(*beaconChain.TBBlock)
-	shard_ref.ConsensusAddTBs(data)
-	shard_ref.ExecutionAddTBs(data)
+	committee_ref.AddTBs(data)
+	shard_ref.AddTBs(data)
 }
 
 func comLeaderInitMultiSign(comID uint32, msg interface{}) {
@@ -586,7 +586,7 @@ func sendPbftMsg(comID uint32, msg interface{}, msgType string) {
 		if i > 0 && (msgType == CReply || msgType == CRequestOldrequest) { // reply、CRequestOldrequest 只需发给leader
 			return
 		}
-		// log.Debug(fmt.Sprintf("%d %v\n", uint32(min(shardSize, len(cfg.ComNodeTable[comID]))), cfg.ComNodeTable))
+		log.Debug(fmt.Sprintf("%d %v\n", uint32(min(shardSize, len(cfg.ComNodeTable[comID]))), cfg.ComNodeTable))
 		addr := cfg.ComNodeTable[comID][i]
 
 		log.Debug(fmt.Sprintf("addr: %v, comid: %v, i: %v\n", addr, comID, i))
