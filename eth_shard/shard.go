@@ -3,9 +3,6 @@ package eth_shard
 import (
 	"bytes"
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/state"
-	"github.com/ethereum/go-ethereum/trie"
 	"go-w3chain/beaconChain"
 	"go-w3chain/cfg"
 	"go-w3chain/core"
@@ -17,6 +14,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/trie"
 )
 
 type MultiSignData struct {
@@ -152,6 +153,7 @@ func (s *Shard) SetInitialAccountState(Addrs map[common.Address]struct{}, maxVal
 
 // 执行交易
 func (s *Shard) executeTransactions(txs []*core.Transaction) common.Hash {
+	log.Debug("execute transactions")
 	stateDB := s.blockchain.GetStateDB()
 	now := time.Now().Unix()
 
@@ -189,16 +191,21 @@ func (s *Shard) executeTransaction(tx *core.Transaction, stateDB *state.StateDB,
 
 // consensus layer
 func (s *Shard) ConsensusInitialize(shardID uint32, clientCnt int, _node *eth_node.EthNode, config *core.CommitteeConfig) *Shard {
-	shard := &Shard{
-		config:        config,
-		multiSignData: &MultiSignData{},
-		Node:          _node,
-		injectNotDone: int32(clientCnt),
-		to_reconfig:   false,
-	}
+	// shard := &Shard{
+	// 	config:        config,
+	// 	multiSignData: &MultiSignData{},
+	// 	Node:          _node,
+	// 	injectNotDone: int32(clientCnt),
+	// 	to_reconfig:   false,
+	// }
+	s.config = config
+	s.multiSignData = &MultiSignData{}
+	s.injectNotDone = int32(clientCnt)
+	s.to_reconfig = false
+
 	log.Info("NewCommittee", "shardID", shardID, "nodeID", _node.NodeInfo.NodeID)
 
-	return shard
+	return s
 }
 
 // start and close
@@ -256,10 +263,12 @@ func (s *Shard) getBlockHeight() *big.Int {
  */
 func (s *Shard) ConsensusAddTBs(tbblock *beaconChain.TBBlock) {
 	log.Debug(fmt.Sprintf("committee get tbchain confirm block... %v", tbblock))
+	log.Debug("ConsensusAddTBs", "s.tbchain_height=", s.tbchain_height, "tbblock.Height=", tbblock.Height)
 	if tbblock.Height <= s.tbchain_height {
 		return
 	}
 	s.tbchain_height = tbblock.Height
+	log.Debug("ConsensusAddTBs", "s.tbchain_height=", s.tbchain_height)
 
 	// 收到特定高度的信标链区块后准备重组
 	if s.tbchain_height > 0 && s.tbchain_height%uint64(s.config.Height2Reconfig) == 0 {
@@ -285,6 +294,7 @@ func (s *Shard) AdjustRecordedAddrs(addrs []common.Address, vrfs [][]byte, seedH
 }
 
 func (s *Shard) HandleClientSendtx(txs []*core.Transaction) {
+	log.Debug(fmt.Sprintf("HandleClientSendtx txs=%v", len(txs)))
 	if s.txPool == nil { // 交易池尚未创建，丢弃该交易
 		return
 	}
@@ -293,6 +303,7 @@ func (s *Shard) HandleClientSendtx(txs []*core.Transaction) {
 
 func (s *Shard) send2Client(receipts map[uint64]*result.TXReceipt, txs []*core.Transaction) {
 	// 分客户端
+	log.Debug(fmt.Sprintf("send2Client txs=%v", len(txs)))
 	msg2Client := make(map[int][]*result.TXReceipt)
 	for _, tx := range txs {
 		cid := int(tx.Cid)
@@ -414,6 +425,7 @@ func (s *Shard) UpdateTbChainHeight(height uint64) {
 }
 
 func (s *Shard) NewBlockGenerated(block *core.Block) {
+	log.Debug("NewBlockGenerated", "s.to_reconfig=", s.to_reconfig)
 	if s.to_reconfig {
 		// 关闭worker
 		s.worker.exitCh <- struct{}{}
@@ -424,6 +436,9 @@ func (s *Shard) NewBlockGenerated(block *core.Block) {
 			SeedHeight: height,
 			ComID:      s.Node.NodeInfo.ComID,
 		}
+
+		log.Debug("init reconfig")
+
 		s.Node.InitReconfig(msg)
 		s.to_reconfig = false
 	}

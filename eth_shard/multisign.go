@@ -44,56 +44,25 @@ func (s *Shard) initMultiSign(tb *core.TimeBeacon, seed common.Hash, height uint
 }
 
 func (s *Shard) HandleMultiSignRequest(request *core.ComLeaderInitMultiSign) {
-	//	seed := request.Seed
-	//	tb := request.Tb
-	//
-	//	account := s.Node.GetAccount()
-	//
-	//	vrf := account.GenerateVRFOutput(seed[:])
-	//	if !vrfResultIsGood(vrf.RandomValue) {
-	//		return
-	//	}
-	//
-	//	reply := &core.MultiSignReply{
-	//		Request:    request,
-	//		PubAddress: *account.GetAccountAddress(),
-	//		Sig:        account.SignHash(tb.Hash()),
-	//		VrfValue:   vrf.RandomValue,
-	//		NodeInfo:   s.Node.GetPbftNode().NodeInfo,
-	//	}
-	//
-	//	s.messageHub.Send(core.MsgTypeSendMultiSignReply, s.Node.NodeInfo.ComID, reply, nil)
-	//}
-	//
-	//func (s *Shard) HandleMultiSignReply(reply *core.MultiSignReply) {
-	//	s.multiSignLock.Lock()
-	//	defer s.multiSignLock.Unlock()
-	//
-	//	if len(s.multiSignData.Signers) >= s.config.MultiSignRequiredNum {
-	//		return
-	//	}
-	//
-	//	if !node.VerifySignature(reply.Request.Seed[:], reply.VrfValue, reply.PubAddress) {
-	//		log.Debug(fmt.Sprintf("vrf verification not pass.. nodeID: %d", reply.NodeInfo.NodeID))
-	//		return
-	//	}
-	//	if !vrfResultIsGood(reply.VrfValue) {
-	//		log.Debug(fmt.Sprintf("vrf not good.. nodeID: %d", reply.NodeInfo.NodeID))
-	//		return
-	//	}
-	//	tbHash := reply.Request.Tb.Hash()
-	//	if !node.VerifySignature(tbHash, reply.Sig, reply.PubAddress) {
-	//		log.Debug(fmt.Sprintf("signature verification not pass.. nodeID: %d", reply.NodeInfo.NodeID))
-	//		return
-	//	}
-	//	s.multiSignData.Signers = append(s.multiSignData.Signers, reply.PubAddress)
-	//	s.multiSignData.Sigs = append(s.multiSignData.Sigs, reply.Sig)
-	//	s.multiSignData.Vrfs = append(s.multiSignData.Vrfs, reply.VrfValue)
-	//
-	//	if len(s.multiSignData.Sigs) == s.config.MultiSignRequiredNum { // 收到足够签名
-	//		s.multiSignData.MultiSignDone <- struct{}{}
-	//	}
-	//
+	seed := request.Seed
+	tb := request.Tb
+
+	account := s.Node.GetAccount()
+
+	vrf := account.GenerateVRFOutput(seed[:])
+	if !vrfResultIsGood(vrf.RandomValue) {
+		return
+	}
+
+	reply := &core.MultiSignReply{
+		Request:    request,
+		PubAddress: *account.GetAccountAddress(),
+		Sig:        account.SignHash(tb.Hash()),
+		VrfValue:   vrf.RandomValue,
+		NodeInfo:   s.Node.GetPbftNode().NodeInfo,
+	}
+
+	s.messageHub.Send(core.MsgTypeSendMultiSignReply, s.Node.NodeInfo.ComID, reply, nil)
 }
 
 func (com *Shard) HandleMultiSignReply(reply *core.MultiSignReply) {
