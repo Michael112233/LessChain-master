@@ -7,6 +7,7 @@ const (
 	ComGetHeight string = "ComGetHeight"
 
 	ComGetState    string = "ComGetState"
+	ComGetTx       string = "ComGetTx"
 	ShardSendState string = "ShardSendState"
 
 	ClientSendTx        string = "ClientSendTx"

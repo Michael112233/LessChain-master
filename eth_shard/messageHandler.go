@@ -92,6 +92,14 @@ func (s *Shard) HandleComGetHeight() *big.Int {
 	return height
 }
 
+func (s *Shard) HandleComGetTx(txs []*core.Transaction) {
+	log.Debug(fmt.Sprintf("HandleClientSendtx txs=%v", len(txs)))
+	if s.txPool == nil { // 交易池尚未创建，丢弃该交易
+		return
+	}
+	s.txPool.AddTxs(txs)
+}
+
 /*
 	分片收到区块后，执行其中的交易，并将得到的状态树根与区块中的状态树根比较
 

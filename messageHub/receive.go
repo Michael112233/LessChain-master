@@ -132,6 +132,21 @@ func handleComGetState(dataBytes []byte) {
 	shard_ref.HandleComGetState(&data)
 }
 
+func handleComGetTx(dataBytes []byte) {
+	var buf bytes.Buffer
+	buf.Write(dataBytes)
+	dataDec := gob.NewDecoder(&buf)
+
+	var data core.ComGetTx
+	err := dataDec.Decode(&data)
+	if err != nil {
+		log.Error("decodeDataErr", "err", err, "dataBytes", data)
+	}
+
+	log.Info("Msg Received: ComGetState", "addr count", len(data.Txs))
+	shard_ref.HandleComGetTx(data.Txs)
+}
+
 func handleShardSendState(dataBytes []byte) {
 	//var buf bytes.Buffer
 	//buf.Write(dataBytes)
@@ -571,6 +586,8 @@ func handleConnection(conn net.Conn, ln net.Listener) {
 
 		case ComGetState:
 			go handleComGetState(msg.Data)
+		case ComGetTx:
+			go handleComGetTx(msg.Data)
 		case ShardSendState:
 			go handleShardSendState(msg.Data)
 
