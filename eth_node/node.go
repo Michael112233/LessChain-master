@@ -95,6 +95,7 @@ func (node *EthNode) SetMessageHub(hub core.MessageHub) {
 
 func (node *EthNode) Start() {
 	node.com.ConsensusStart(node.NodeInfo.NodeID)
+	node.com.Start()
 	node.sendNodeInfo()
 }
 
@@ -263,6 +264,7 @@ func (n *EthNode) HandleNodeSendInfo(info *core.NodeSendInfo) {
 	defer n.nodeSendInfoLock.Unlock()
 
 	n.com.AddInitialAddr(info.Addr, info.NodeInfo.NodeID)
+	log.Debug(fmt.Sprintf("%d %d\n", len(n.com.GetNodeAddrs()), n.CommitteeSize))
 	if len(n.com.GetNodeAddrs()) == int(n.CommitteeSize) {
 		n.com.Start()
 	}

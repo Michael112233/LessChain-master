@@ -83,7 +83,7 @@ func runEthClient(allCfg *cfg.Cfg) {
 
 	// 加载交易数据，分配交易到每个节点中
 	data.LoadETHData(allCfg.DatasetDir, allCfg.MaxTxNum)
-	data.SetTxShardId(allCfg.ShardSize)
+	data.SetTxShardId(allCfg.ShardNum)
 
 	// 注入交易到客户端
 	data.SetTX2ClientTable(allCfg.ClientNum)

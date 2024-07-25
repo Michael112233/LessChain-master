@@ -124,7 +124,9 @@ func (w *Worker) newWorkLoop(recommit time.Duration) {
 		/* 通知committee 有新区块产生
 		   当出完一个块需要重组时，worker会阻塞在这个函数内
 		*/
+		log.Debug("start reconfig")
 		w.com.NewBlockGenerated(block)
+		log.Debug("end reconfig")
 
 		// 如果有重组，应在重组完成后再开始打包交易
 		timer.Reset(recommit)
@@ -189,6 +191,7 @@ func (w *Worker) broadcastTbInCommittee(block *core.Block, seed common.Hash, hei
 
 /* 生成交易收据, 发送给客户端 */
 func (w *Worker) sendTXReceipt2Client(txs []*core.Transaction) {
+	log.Debug(fmt.Sprintf("sendTXReceipt2Client txs=%v", len(txs)))
 	table := make(map[uint64]*result.TXReceipt)
 	for _, tx := range txs {
 		if tx.TXStatus == result.DefaultStatus {
@@ -250,10 +253,12 @@ func analyseStates(states *core.ShardSendState) (map[common.Address]*types.State
 func (w *Worker) commit(timestamp int64) (*core.Block, error) {
 	// 获取分片最新的区块高度
 	parentHeight := w.com.getBlockHeight()
+	log.Debug("commit", "parentHeight=", parentHeight)
 	// 从交易池选取交易，排除掉超时的跨分片交易
 	txs, addrs := w.com.txPool.Pending(w.config.MaxBlockSize, parentHeight)
 	// 从分片获取交易相关账户的状态及证明
 	states := w.com.getStatusFromShard(addrs)
+	log.Debug("commit", "states")
 	// 解析状态及证明
 	addr2State, hash2Node := analyseStates(states)
 	// 执行交易，更改账户状态
@@ -287,6 +292,7 @@ func (w *Worker) commit(timestamp int64) (*core.Block, error) {
 
 	w.com.AddBlock2Shard(block)
 	/* 生成交易收据, 并发送到客户端 */
+	log.Debug(fmt.Sprintf("sendTXReceipt2Client txs=%v", len(txs)))
 	w.sendTXReceipt2Client(txs)
 
 	log.Debug("create block", "comID", w.com.Node.NodeInfo.ComID, "block Height", header.Number, "# tx", len(txs), "txpoolLen", w.com.txPool.PendingLen()+w.com.TXpool().PendingRollbackLen())
