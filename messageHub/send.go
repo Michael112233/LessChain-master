@@ -6,11 +6,12 @@ import (
 	"encoding/binary"
 	"encoding/gob"
 	"fmt"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"go-w3chain/beaconChain"
 	"go-w3chain/cfg"
 	"go-w3chain/core"
 	"go-w3chain/log"
-	"go-w3chain/result"
 	"go-w3chain/utils"
 	"io"
 	"math/big"
@@ -94,6 +95,7 @@ func comGetHeightFromShard(shardID uint32, msg interface{}) *big.Int {
 	addr := cfg.NodeTable[shardID][0]
 	conn, ok := conns2Node.Get(addr)
 	if !ok {
+		log.Info("comGetHeightFromShard")
 		conn, err = dial(addr)
 		if err != nil {
 			log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
@@ -171,9 +173,9 @@ func shardSendGenesis(msg interface{}) {
 	log.Info("Msg Sent: ShardSendGenesis", "data", data)
 }
 
-func clientInjectTx2Node(nodeID uint32, msg interface{}) {
-	comID := uint32(0)
-	data := msg.([]*core.Transaction)
+func clientInjectTx2Node(comID uint32, msg interface{}) {
+	log.Info("clientInjectTx2Node")
+	data := msg.(*core.ClientSend2Node)
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	err := enc.Encode(data)
@@ -182,11 +184,14 @@ func clientInjectTx2Node(nodeID uint32, msg interface{}) {
 	}
 
 	// 序列化后的消息
-	msg_bytes := packMsg("ClientSendTx", buf.Bytes())
+	msg_bytes := packMsg(ClientSendTx, buf.Bytes())
 
 	// 发送给委员会的leader即可
-	addr := cfg.ComNodeTable[comID][nodeID]
+	nodeID := data.NodeID
+	comID = data.ShardID
+	addr := cfg.ComNodeTable[comID][0]
 	conn, ok := conns2Node.Get(addr)
+	log.Info("clientInjectTx2Node")
 	if !ok {
 		conn, err = dial(addr)
 		if err != nil {
@@ -199,7 +204,7 @@ func clientInjectTx2Node(nodeID uint32, msg interface{}) {
 	writer.Write(msg_bytes)
 	writer.Flush()
 
-	log.Info("Msg Sent: ClientSendTx", "targetComID", comID, "targetNodeID", nodeID, "targetAddr", addr, "tx count", len(data))
+	log.Info("Msg Sent: ClientSendTx", "targetComID", comID, "targetNodeID", nodeID, "targetAddr", addr, "tx count", len(data.Txs))
 }
 
 func clientSetInjectDone2Nodes(cid uint32) {
@@ -212,49 +217,48 @@ func clientSetInjectDone2Nodes(cid uint32) {
 	}
 
 	// 序列化后的消息
-	msg_bytes := packMsg("ClientSetInjectDone", buf.Bytes())
-
+	msg_bytes := packMsg(ClientSetInjectDone, buf.Bytes())
+	log.Info("clientSetInjectDone2Nodes")
 	// 向所有节点发送交易注入完成信息
 	var i, j uint32
 	for i = 0; i < uint32(shardNum); i++ {
-		for j = 0; j < uint32(comAllNodeNum); j++ {
-			addr := cfg.NodeTable[i][j]
-			conn, ok := conns2Node.Get(addr)
-			if !ok {
-				conn, err = dial(addr)
-				if err != nil {
-					log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
-						"clientSetInjectDone2Nodes", i, -1, j, addr))
-				}
-				conns2Node.Add(addr, conn)
-			}
-			_, err := conn.Write(msg_bytes)
-			// if err != nil {
-			// 	panic(err)
-			// }
-			// 尝试重新建立连接后再发送一次，若依然失败则panic
+		addr := cfg.ComNodeTable[i][0]
+		conn, ok := conns2Node.Get(addr)
+		if !ok {
+			conn, err = dial(addr)
 			if err != nil {
-				log.Debug(fmt.Sprint("write tcp error: ", err))
-				conn, err = dial(addr)
-				if err != nil {
-					log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
-						"clientSetInjectDone2Nodes", i, -1, j, addr))
-				}
-				conns2Node.Add(addr, conn)
-				_, err := conn.Write(msg_bytes)
-				if err != nil {
-					panic(err)
-				}
+				log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+					"clientSetInjectDone2Nodes", i, -1, j, addr))
 			}
-
-			conn.Close()
-			log.Info("Msg Sent: ClientSetInjectDone", "clientID", cid, "shardID", i, "nodeID", j)
+			conns2Node.Add(addr, conn)
 		}
+		_, err := conn.Write(msg_bytes)
+		// if err != nil {
+		// 	panic(err)
+		// }
+		// 尝试重新建立连接后再发送一次，若依然失败则panic
+		if err != nil {
+			log.Debug(fmt.Sprint("write tcp error: ", err))
+			conn, err = dial(addr)
+			if err != nil {
+				log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+					"clientSetInjectDone2Nodes", i, -1, j, addr))
+			}
+			conns2Node.Add(addr, conn)
+			_, err := conn.Write(msg_bytes)
+			if err != nil {
+				panic(err)
+			}
+		}
+
+		conn.Close()
+		log.Info("Msg Sent: ClientSetInjectDone", "clientID", cid, "shardID", i, "nodeID", j)
 	}
 }
 
 func comReceiveTxsFromNode(shardID uint32, msg interface{}) {
 	data := msg.(*core.ComGetTx)
+	log.Debug("comReceiveTxsFromNode", "data=", data)
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	err := enc.Encode(data)
@@ -265,7 +269,8 @@ func comReceiveTxsFromNode(shardID uint32, msg interface{}) {
 	// 序列化后的消息
 	msg_bytes := packMsg("ComGetTx", buf.Bytes())
 
-	addr := cfg.NodeTable[shardID][0]
+	addr := cfg.ComNodeTable[shardID][0]
+	log.Debug("comReceiveTxsFromNode", "ToAddr", addr)
 	conn, ok := conns2Node.Get(addr)
 	if !ok {
 		conn, err = dial(addr)
@@ -279,7 +284,7 @@ func comReceiveTxsFromNode(shardID uint32, msg interface{}) {
 	writer.Write(msg_bytes)
 	writer.Flush()
 
-	log.Info("Msg Sent: ComGetTx", "len count", len(data.Txs))
+	log.Info("Msg Sent: ComGetTx", "len count", len(data.Txs), "from", data.From_nodeID)
 }
 
 func comGetStateFromShard(shardID uint32, msg interface{}) {
@@ -295,8 +300,9 @@ func comGetStateFromShard(shardID uint32, msg interface{}) {
 	msg_bytes := packMsg("ComGetState", buf.Bytes())
 
 	// 从分片的leader节点获取
-	addr := cfg.NodeTable[shardID][0]
+	addr := cfg.ComNodeTable[shardID][0]
 	conn, ok := conns2Node.Get(addr)
+	log.Info("comGetStateFromShard")
 	if !ok {
 		conn, err = dial(addr)
 		if err != nil {
@@ -322,9 +328,10 @@ func shardSendStateToCom(comID uint32, msg interface{}) {
 	}
 
 	// 序列化后的消息
-	msg_bytes := packMsg("ShardSendState", buf.Bytes())
+	msg_bytes := packMsg(ShardSendState, buf.Bytes())
 	// 只发送给委员会的leader节点
 	addr := cfg.ComNodeTable[comID][0]
+	log.Info("shardSendStateToCom")
 	conn, ok := conns2Node.Get(addr)
 	if !ok {
 		conn, err = dial(addr)
@@ -354,8 +361,9 @@ func comSendBlock2Shard(shardID uint32, msg interface{}) {
 	msg_bytes := packMsg("ComSendBlock", buf.Bytes())
 
 	// 只发送给分片的leader节点
-	addr := cfg.NodeTable[shardID][0]
+	addr := cfg.ComNodeTable[shardID][0]
 	conn, ok := conns2Node.Get(addr)
+	log.Info("comSendBlock2Shard")
 	if !ok {
 		conn, err = dial(addr)
 		if err != nil {
@@ -372,7 +380,9 @@ func comSendBlock2Shard(shardID uint32, msg interface{}) {
 }
 
 func comSendReply2Client(clientID uint32, msg interface{}) {
-	data := msg.([]*result.TXReceipt)
+	// modi
+	log.Debug("comSendReply2Client", "clientID", clientID)
+	data := msg.(*core.ComReply2Client)
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	err := enc.Encode(data)
@@ -382,7 +392,6 @@ func comSendReply2Client(clientID uint32, msg interface{}) {
 
 	// 序列化后的消息
 	msg_bytes := packMsg("ComSendTxReceipt", buf.Bytes())
-
 	addr := cfg.ClientTable[clientID]
 	conn, ok := conns2Node.Get(addr)
 	if !ok {
@@ -397,7 +406,7 @@ func comSendReply2Client(clientID uint32, msg interface{}) {
 	writer.Write(msg_bytes)
 	writer.Flush()
 
-	log.Info("Msg Sent: ComSendTxReceipt", "toClientID", clientID, "tx count", len(data))
+	log.Info("Msg Sent: ComSendTxReceipt", "fromShardID", data.ComID, "toClientID", clientID, "tx count", len(data.Results))
 }
 
 // 调用beaconChain包，再通过ethClient与ethchain交互
@@ -414,12 +423,14 @@ func getEthLatestBlock(callback func(...interface{})) {
 }
 
 func getEthBlock(msg interface{}, callback func(...interface{})) {
+	log.Info("GetEthBlock")
 	height := msg.(uint64)
 	hash, got_height := tbChain_ref.GetEthChainBlockHash(height)
 	callback(hash, got_height)
 }
 
 func tbChainPushBlock2Client(msg interface{}) {
+	log.Info("tbChainPushBlock2Client")
 	if client_ref == nil {
 		return
 	}
@@ -450,7 +461,7 @@ func comLeaderInitMultiSign(comID uint32, msg interface{}) {
 
 	// 向委员会中的所有共识节点发送（包括自己）
 	var i uint32
-	for i = 0; i < uint32(min(shardSize, len(cfg.ComNodeTable[comID]))); i++ {
+	for i = 0; i < uint32(min(4, len(cfg.ComNodeTable[comID]))); i++ {
 		addr := cfg.ComNodeTable[comID][i]
 		if addr == "" {
 			if i == 3 {
@@ -612,7 +623,7 @@ func sendPbftMsg(comID uint32, msg interface{}, msgType string) {
 
 	var i uint32
 	nodeAddr := node_ref.NodeInfo.NodeAddr
-	for i = 0; i < uint32(min(shardSize, len(cfg.ComNodeTable[comID]))); i++ { // original ShardSize
+	for i = 0; i < uint32(min(4, len(cfg.ComNodeTable[comID]))); i++ { // original ShardSize
 		if i > 0 && (msgType == CReply || msgType == CRequestOldrequest) { // reply、CRequestOldrequest 只需发给leader
 			return
 		}
@@ -930,6 +941,40 @@ func sendGetPoolTx(comID uint32, msg interface{}, callback func(...interface{}))
 	callback(poolTx)
 }
 
+func sendSync2Node(comID uint32, msg interface{}) {
+	data := msg.(map[common.Address]*types.StateAccount)
+
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(data)
+	if err != nil {
+		log.Error("gobEncodeErr", "err", err, "data", data)
+	}
+
+	// 序列化后的消息
+	msg_bytes := packMsg(SendSync2Nodes, buf.Bytes())
+
+	//target_addrs := cfg.ComNodeTable[comID]
+	//for i := 1; i < len(target_addrs); i++ {
+	for _, addr := range cfg.ComNodeTable[comID] {
+		//addr := target_addrs[uint32(i)]
+		conn, ok := conns2Node.Get(addr)
+		if !ok {
+			conn, err = dial(addr)
+			if err != nil {
+				log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+					"sendReconfigResults2ComNodes", -1, comID, addr))
+			}
+			conns2Node.Add(addr, conn)
+		}
+		writer := bufio.NewWriter(conn)
+		writer.Write(msg_bytes)
+		writer.Flush()
+		log.Info(fmt.Sprintf("Msg Sent: %s ComID: %d to_nodeID: %d, to_addr: %s", SendSync2Nodes, comID, addr))
+	}
+	log.Info("End to Send sync data")
+}
+
 func sendGetSyncData(comID uint32, msg interface{}, callback func(...interface{})) {
 	data := msg.(*core.GetSyncData)
 	var buf bytes.Buffer
@@ -957,18 +1002,18 @@ func sendGetSyncData(comID uint32, msg interface{}, callback func(...interface{}
 	if err != nil {
 		log.Error("WriteError", "err", err)
 	}
-	log.Info(fmt.Sprintf("Msg Sent: %s syncMode: %v", GetSyncData, data.SyncType))
+	log.Info(fmt.Sprintf("Msg Sent: %s syncMode: %v, Get from %s", GetSyncData, data.SyncType, addr))
 
 	// 等待回复
 
 	// 首先读取消息长度的四个字节
-	lengthBuf := make([]byte, 4)
+	lengthBuf := make([]byte, 8)
 	_, err = io.ReadFull(conn, lengthBuf)
 	if err != nil {
-		log.Error("ReadLengthError", "err", err)
+		log.Error("ReadLengthError", "err", err, "lengthBuf", lengthBuf)
 	}
 	// 解析这四个字节为int32来获取消息长度
-	msgLength := int(binary.BigEndian.Uint32(lengthBuf))
+	msgLength := int64(binary.BigEndian.Uint64(lengthBuf))
 
 	// 根据消息长度分配缓冲区
 	msgBuf := make([]byte, msgLength)
@@ -976,11 +1021,16 @@ func sendGetSyncData(comID uint32, msg interface{}, callback func(...interface{}
 	if err != nil {
 		log.Error("ReadMsgError", "err", err)
 	}
+	log.Info("End Reading four bytes")
 
 	syncData := new(core.SyncData)
+	log.Info("111")
 	decodeBuf := bytes.NewReader(msgBuf)
+	log.Info("222")
 	decoder := gob.NewDecoder(decodeBuf)
+	log.Info("333")
 	err = decoder.Decode(syncData)
+	log.Debug("444", "syncData", len(syncData.States))
 	if err != nil {
 		log.Error("Failed to decode", "err", err)
 	}
@@ -1072,6 +1122,37 @@ func reportAny(clientID uint32, msg interface{}) {
 	log.Info("Msg Sent: reportAny", "toClientID", clientID, "dataStr", data)
 }
 
+func sendResults(clientID uint32, msg interface{}) {
+	log.Info("start send result")
+	data := msg.(int)
+	log.Debug("data", "data", data)
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(data)
+	if err != nil {
+		log.Error("gobEncodeErr", "err", err, "data", data)
+	}
+
+	// 序列化后的消息
+	msg_bytes := packMsg(SendResults, buf.Bytes())
+
+	addr := cfg.ClientTable[clientID]
+	conn, ok := conns2Node.Get(addr)
+	if !ok {
+		conn, err = dial(addr)
+		if err != nil {
+			log.Error(fmt.Sprintf("Dial Error. caller: %s targetShardID: %d targetComID: %d targetNodeID: %d targetAddr: %s",
+				ReportAny, -1, -1, -1, addr))
+		}
+		conns2Node.Add(addr, conn)
+	}
+	writer := bufio.NewWriter(conn)
+	writer.Write(msg_bytes)
+	writer.Flush()
+
+	log.Info("Msg Sent: SendResults", "toClientID", clientID, "dataStr", data)
+}
+
 /* 用于分片、委员会、客户端、信标链传送消息 */
 func (hub *GoodMessageHub) Send(msgType uint32, id uint32, msg interface{}, callback func(res ...interface{})) {
 	switch msgType {
@@ -1119,6 +1200,8 @@ func (hub *GoodMessageHub) Send(msgType uint32, id uint32, msg interface{}, call
 		sendGetPoolTx(id, msg, callback)
 	case core.MsgTypeGetSyncData:
 		sendGetSyncData(id, msg, callback)
+	//case core.MsgTypeGetExecutionInfo:
+	//	getExecutionInfo(id, msg, callback)
 	case core.MsgTypeComSendNewAddrs:
 		comSendNewAddrs(id, msg)
 	case core.MsgTypeSendNewNodeTable2Client:
@@ -1164,6 +1247,11 @@ func (hub *GoodMessageHub) Send(msgType uint32, id uint32, msg interface{}, call
 		reportError(id, msg)
 	case core.MsgTypeReportAny:
 		reportAny(id, msg)
+
+	case core.MsgTypeGetResults:
+		sendResults(id, msg)
+	case core.MsgTypeSendSync2Node:
+		sendSync2Node(id, msg)
 	}
 
 }

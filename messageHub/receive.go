@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"encoding/gob"
 	"fmt"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"go-w3chain/cfg"
 	"go-w3chain/core"
 	"go-w3chain/log"
@@ -57,14 +59,14 @@ func handleClientSendTx(dataBytes []byte) {
 	buf.Write(dataBytes)
 	dataDec := gob.NewDecoder(&buf)
 
-	var data []*core.Transaction
+	var data *core.ClientSend2Node
 	err := dataDec.Decode(&data)
 	if err != nil {
 		log.Error("decodeDataErr", "err", err)
 	}
-
-	log.Info("Msg Received: ClientSendTx", "tx count", len(data))
-	node_ref.HandleClientSendtx(data)
+	txs := data.Txs
+	log.Info("Msg Received: ClientSendTx", "tx count", len(txs))
+	shard_ref.HandleClientSendtx(txs)
 }
 
 func handleClientSetInjectDone(dataBytes []byte) {
@@ -143,7 +145,7 @@ func handleComGetTx(dataBytes []byte) {
 		log.Error("decodeDataErr", "err", err, "dataBytes", data)
 	}
 
-	log.Info("Msg Received: ComGetState", "addr count", len(data.Txs))
+	log.Info("Msg Received: ComGetTx", "addr count", len(data.Txs), "from", data.From_nodeID)
 	shard_ref.HandleComGetTx(data.Txs)
 }
 
@@ -239,12 +241,14 @@ func handleMultiSignReply(dataBytes []byte) {
 //////////////////////////////////////////////////
 
 func handleComSendTxReceipt(dataBytes []byte) {
+	log.Info("Start to handleComSendTxReceipt")
 	var buf bytes.Buffer
 	buf.Write(dataBytes)
 	dataDec := gob.NewDecoder(&buf)
 
-	var data []*result.TXReceipt
-	err := dataDec.Decode(&data)
+	var data1 *core.ComReply2Client
+	err := dataDec.Decode(&data1)
+	data := data1.Results
 	if err != nil {
 		log.Error("decodeDataErr", "err", err, "dataBytes", data)
 	}
@@ -419,6 +423,23 @@ func handleSendReconfigResults2ComNodes(dataBytes []byte) {
 	node_ref.HandleSendReconfigResults2ComNodes(&data)
 }
 
+func handleSendSync2Nodes(dataBytes []byte) {
+	log.Info("handleSendSync2Nodes")
+	var buf bytes.Buffer
+	buf.Write(dataBytes)
+	dataDec := gob.NewDecoder(&buf)
+
+	var data map[common.Address]*types.StateAccount
+	err := dataDec.Decode(&data)
+	if err != nil {
+		log.Error("decodeDataErr", "err", err, "dataBytes", data)
+	}
+
+	log.Info(fmt.Sprintf("Msg Received: %s", SendReconfigResults2ComNodes))
+
+	node_ref.HandleSendSync2Node(data)
+}
+
 func handleGetPoolTx(dataBytes []byte, conn net.Conn) {
 	var buf bytes.Buffer
 	buf.Write(dataBytes)
@@ -481,9 +502,9 @@ func handleGetSyncData(dataBytes []byte, conn net.Conn) {
 	msgBytes := buf1.Bytes()
 
 	// 前缀加上长度，防止粘包
-	networkBuf := make([]byte, 4+len(msgBytes))
-	binary.BigEndian.PutUint32(networkBuf[:4], uint32(len(msgBytes)))
-	copy(networkBuf[4:], msgBytes)
+	networkBuf := make([]byte, 8+len(msgBytes))
+	binary.BigEndian.PutUint64(networkBuf[:8], uint64(len(msgBytes)))
+	copy(networkBuf[8:], msgBytes)
 	// 发送回复
 	_, err = conn.Write(networkBuf)
 	if err != nil {
@@ -493,7 +514,43 @@ func handleGetSyncData(dataBytes []byte, conn net.Conn) {
 	log.Info(fmt.Sprintf("Analyse SyncData size... sizeof State(bytes): %d  sizeof Blocks(bytes): %d", len(utils.EncodeAny(syncData.States)), len(utils.EncodeAny(syncData.Blocks))))
 }
 
+func handleGetExecutionInfo(dataBytes []byte, conn net.Conn) {
+	var buf bytes.Buffer
+	buf.Write(dataBytes)
+	dataDec := gob.NewDecoder(&buf)
+
+	var data int
+	err := dataDec.Decode(&data)
+	if err != nil {
+		log.Error("decodeDataErr", "err", err, "dataBytes", data)
+	}
+
+	log.Info(fmt.Sprintf("Msg Received: %s", GetExecutionInfo))
+
+	// 直接通过这个连接回复请求方
+	executionInfo := shard_ref.HandleGetExecutionInfo()
+	var buf1 bytes.Buffer
+	encoder := gob.NewEncoder(&buf1)
+	err = encoder.Encode(executionInfo)
+	if err != nil {
+		log.Error("gobEncodeErr", "err", err)
+	}
+	msgBytes := buf1.Bytes()
+
+	// 前缀加上长度，防止粘包
+	networkBuf := make([]byte, 4+len(msgBytes))
+	binary.BigEndian.PutUint32(networkBuf[:4], uint32(len(msgBytes)))
+	copy(networkBuf[4:], msgBytes)
+	// 发送回复
+	_, err = conn.Write(networkBuf)
+	if err != nil {
+		log.Error("WriteError", "err", err)
+	}
+	log.Info(fmt.Sprintf("Msg response Sent: %s", GetExecutionInfo))
+}
+
 func handleSendNewNodeTable2Client(dataBytes []byte) {
+	log.Debug("handleSendNewNodeTable2Client")
 	var buf bytes.Buffer
 	buf.Write(dataBytes)
 	dataDec := gob.NewDecoder(&buf)
@@ -504,7 +561,7 @@ func handleSendNewNodeTable2Client(dataBytes []byte) {
 		log.Error("decodeDataErr", "err", err, "dataBytes", data)
 	}
 
-	log.Info(fmt.Sprintf("Msg Received: %s", SendNewNodeTable2Client))
+	log.Info(fmt.Sprintf("Msg Received: %s, %v", SendNewNodeTable2Client, data))
 
 	cfg.ComNodeTable = data
 }
@@ -539,6 +596,24 @@ func handleReportAny(dataBytes []byte) {
 	log.Info(fmt.Sprintf("Msg Received: %s", ReportAny))
 
 	log.Info("got msg report.", "msg", data)
+}
+
+func handleSendResults(dataBytes []byte) {
+	var buf bytes.Buffer
+	buf.Write(dataBytes)
+	dataDec := gob.NewDecoder(&buf)
+
+	var data int
+	err := dataDec.Decode(&data)
+	if err != nil {
+		log.Error("decodeDataErr", "err", err, "dataBytes", data)
+	}
+	data1 := int64(data)
+
+	log.Info("Msg Received: handleSendResults")
+
+	result.ReconfigTxNum.Add(data1)
+	result.Tps_list = append(result.Tps_list, result.GetTps())
 }
 
 func handleConnection(conn net.Conn, ln net.Listener) {
@@ -614,10 +689,14 @@ func handleConnection(conn net.Conn, ln net.Listener) {
 			handleSendReconfigResults2AllComLeaders(msg.Data)
 		case SendReconfigResults2ComNodes:
 			handleSendReconfigResults2ComNodes(msg.Data)
+		case SendSync2Nodes:
+			handleSendSync2Nodes(msg.Data)
 		case GetPoolTx:
 			handleGetPoolTx(msg.Data, conn)
 		case GetSyncData:
 			handleGetSyncData(msg.Data, conn)
+		case GetExecutionInfo:
+			handleGetExecutionInfo(msg.Data, conn)
 		case SendNewNodeTable2Client:
 			handleSendNewNodeTable2Client(msg.Data)
 		// case SendTxPool:
@@ -636,6 +715,9 @@ func handleConnection(conn net.Conn, ln net.Listener) {
 			handleReportErr(msg.Data)
 		case ReportAny:
 			handleReportAny(msg.Data)
+
+		case SendResults:
+			handleSendResults(msg.Data)
 
 		default:
 			log.Error("Unknown message type received", "msgType", msg.MsgType)

@@ -29,12 +29,13 @@ func getHash(val []byte) []byte {
 }
 
 func (s *Shard) HandleComGetState(request *core.ComGetState) *core.ShardSendState {
+	log.Info("HandleComGetState")
 	stateDB := s.blockchain.GetStateDB()
 	// 先看看stateDB中有没有对应账户的节点，没有则先创建节点并更新trie
 	for _, address := range request.AddrList {
 		stateDB.GetOrNewStateObject(address)
 	}
-
+	log.Info("11111")
 	// 获取最新的状态树
 	root := stateDB.IntermediateRoot(false)
 	stateDB.Commit(false)
@@ -44,7 +45,7 @@ func (s *Shard) HandleComGetState(request *core.ComGetState) *core.ShardSendStat
 		log.Error("trie.NewSecure error", "err", err, "trieRoot", root)
 		return nil
 	}
-
+	log.Info("11111")
 	accountsData := make(map[common.Address][]byte)
 	accountsProofs := make(map[common.Address][][]byte)
 	for _, address := range request.AddrList {
@@ -76,7 +77,7 @@ func (s *Shard) HandleComGetState(request *core.ComGetState) *core.ShardSendStat
 
 		accountsProofs[address] = proofs
 	}
-
+	log.Info("11111")
 	response := &core.ShardSendState{
 		StatusTrieHash: root,
 		AccountData:    accountsData,
@@ -84,6 +85,7 @@ func (s *Shard) HandleComGetState(request *core.ComGetState) *core.ShardSendStat
 		Height:         s.blockchain.CurrentBlock().Number(),
 	}
 
+	log.Info("Complete get state")
 	return response
 }
 
@@ -119,13 +121,27 @@ func (s *Shard) HandleComSendBlock(data *core.ComSendBlock) {
 	}
 }
 
+func (s *Shard) HandleGetExecutionInfo() *core.ExecutionInfo {
+	executionInfo := &core.ExecutionInfo{
+		Blockchain:      s.blockchain,
+		InitialAddrList: s.initialAddrList,
+	}
+	return executionInfo
+}
+
 func (s *Shard) HandleGetSyncData(data *core.GetSyncData) *core.SyncData {
 	switch data.SyncType {
 	case "fastsync": // 只同步状态树和最近区块
 		// 状态树
 		states := make(map[common.Address]*types.StateAccount)
 		stateDB := s.blockchain.GetStateDB()
-		for address, _ := range s.activeAddrs {
+		log.Debug("handle sync data", "len", len(s.AllAddrs))
+
+		for _, address := range s.AllAddrs {
+			//if s.activeAddrs[address] != 0 {
+			//	cnt++
+			//}
+
 			accountState := &types.StateAccount{
 				Nonce:    stateDB.GetNonce(address),
 				Balance:  stateDB.GetBalance(address),
@@ -134,6 +150,7 @@ func (s *Shard) HandleGetSyncData(data *core.GetSyncData) *core.SyncData {
 			}
 			states[address] = accountState
 		}
+		log.Debug("info", "", len(states), "", data.ClientAddr)
 
 		// 最近区块
 		blocks := s.blockchain.AllBlocks()

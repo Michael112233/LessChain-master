@@ -48,6 +48,7 @@ func (s *Shard) HandleMultiSignRequest(request *core.ComLeaderInitMultiSign) {
 	tb := request.Tb
 
 	account := s.Node.GetAccount()
+	log.Debug("Multi", "nodeAddr", s.Node.NodeInfo.NodeAddr, "account", account)
 
 	vrf := account.GenerateVRFOutput(seed[:])
 	if !vrfResultIsGood(vrf.RandomValue) {

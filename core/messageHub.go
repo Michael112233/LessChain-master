@@ -36,11 +36,13 @@ const (
 	MsgTypeSendMultiSignReply
 
 	MsgTypeLeaderInitReconfig
+	MsgTypeGetOppositeShard
 	MsgTypeSendReconfigResult2ComLeader
 	MsgTypeSendReconfigResults2AllComLeaders
 	MsgTypeSendReconfigResults2ComNodes
 	MsgTypeGetPoolTx // 新leader向旧leader请求交易池中的交易
 	MsgTypeGetSyncData
+	MsgTypeGetExecutionInfo
 	MsgTypeShardSendFastSyncData
 	MsgTypeSendNewNodeTable2Client
 
@@ -61,4 +63,7 @@ const (
 
 	MsgTypeReportError
 	MsgTypeReportAny
+
+	MsgTypeGetResults
+	MsgTypeSendSync2Node
 )

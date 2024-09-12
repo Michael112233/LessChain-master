@@ -20,11 +20,14 @@ const (
 	MultiSignReply      string = "MultiSignReply"
 
 	LeaderInitReconfig                string = "LeaderInitReconfig"
+	GetOppositeShard                  string = "GetOppositeShard"
 	SendReconfigResult2ComLeader      string = "SendReconfigResult2ComLeader"
 	SendReconfigResults2AllComLeaders string = "SendReconfigResults2AllComLeaders"
 	SendReconfigResults2ComNodes      string = "SendReconfigResults2ComNodes"
+	SendSync2Nodes                    string = "SendSync2Nodes"
 	GetPoolTx                         string = "GetPoolTx" // 新leader向旧leader请求交易池中的交易
 	GetSyncData                       string = "GetSyncData"
+	GetExecutionInfo                  string = "GetExecutionInfo"
 	SendNewNodeTable2Client           string = "SendNewNodeTable2Client"
 
 	// pbft part
@@ -39,4 +42,6 @@ const (
 
 	ReportError string = "ReportError"
 	ReportAny   string = "ReportAny"
+
+	SendResults string = "SendResults"
 )

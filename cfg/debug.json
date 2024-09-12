@@ -1,5 +1,5 @@
 {
-    "MachineNum": 2,
+    "MachineNum": 1,
     "ShardStartIndex": 0,
     
     "LogLevel": 4,
@@ -8,16 +8,16 @@
     "IsLogProgress": true,
     "LogProgressInterval": 20,
 
-    "Role": "",
+    "Role": "node",
 
     "ClientNum": 1,
     "ClientId": 0,
 
-    "ShardNum": 2,
+    "ShardNum": 1,
     "ShardId": 0,
-    "ShardSize": 8,
+    "ShardSize": 16,
     "MultiSignRequiredNum": 2,
-    "ComAllNodeNum": 8,
+    "ComAllNodeNum": 16,
     "NodeId": 0,
 
 
@@ -26,7 +26,7 @@
     "RecommitInterval": 4,
     "MaxBlockTXSize": 1000,
 
-    "Height2Reconfig": 20000,
+    "Height2Reconfig": 3,
     "ReconfigMode": "lesssync",
     "FastsyncBlockNum":20,
 

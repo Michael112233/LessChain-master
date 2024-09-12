@@ -3,6 +3,7 @@
 package pbft
 
 import (
+	"go-w3chain/cfg"
 	"go-w3chain/core"
 	"go-w3chain/pbft/pbft_log"
 	"sync"
@@ -94,6 +95,8 @@ func (p *PbftConsensusNode) Reset() {
 	p.replyCnt = 0
 	p.gotEnoughReply = make(map[uint64]bool)
 	p.height2Digest = make(map[uint64]string)
+	p.node_nums = uint32(len(cfg.ComNodeTable[p.NodeInfo.ComID]))
+	p.malicious_nums = (p.node_nums - 1) / 3
 }
 
 func (p *PbftConsensusNode) SetMessageHub(hub core.MessageHub) {

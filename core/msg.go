@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"go-w3chain/result"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -22,6 +23,12 @@ type ComGetState struct {
 	From_comID     uint32
 	Target_shardID uint32
 	AddrList       []common.Address
+}
+
+type ClientSend2Node struct {
+	ShardID uint32
+	NodeID  uint32
+	Txs     []*Transaction
 }
 
 type ShardSendState struct {
@@ -49,6 +56,11 @@ type BooterSendContract struct {
 
 type ComSendBlock struct {
 	Block *Block
+}
+
+type ComReply2Client struct {
+	Results []*result.TXReceipt
+	ComID   uint32
 }
 
 type ClientSetInjectDone struct {
@@ -121,6 +133,11 @@ type SyncData struct {
 	ClientAddr string
 	States     map[common.Address]*types.StateAccount
 	Blocks     []*Block
+}
+
+type ExecutionInfo struct {
+	Blockchain      *BlockChain
+	InitialAddrList []common.Address // 分片初始时各节点的公钥地址，同时也是初始时对应委员会各节点的地址
 }
 
 type PoolTx struct {

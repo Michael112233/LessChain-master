@@ -60,6 +60,9 @@ type Shard struct {
 	injectNotDone        int32
 	to_reconfig          bool   // 收到特定高度的信标链区块后设为true，准备重组
 	reconfig_seed_height uint64 // 用于重组的种子，所有委员会必须统一
+
+	AllAddrs      []common.Address
+	OppositeShard *core.Shard
 }
 
 // execution layer
@@ -103,9 +106,24 @@ func (s *Shard) ExecutionStart() {
 	s.addGenesisTB()
 }
 
+func (s *Shard) ExecutionReset(info *core.ExecutionInfo) {
+	//all_blocks := info.Blockchain.AllBlocks()
+	//log.Debug("Execution reset", "block size", len(all_blocks))
+	//for blockid := 0; blockid < len(all_blocks); blockid++ {
+	//	s.blockchain.WriteBlock(all_blocks[blockid])
+	//}
+	//log.Info("blockchain finish")
+	s.initialAddrList = info.InitialAddrList
+	log.Info("AddrList finish")
+}
+
 // get shard id
 func (s *Shard) GetShardID() uint32 {
 	return s.Node.NodeInfo.ShardID
+}
+
+func (s *Shard) GetBlockChain() *core.BlockChain {
+	return s.blockchain
 }
 
 // 将创世区块写入信标链中
@@ -143,12 +161,14 @@ func (s *Shard) AddBlock(block *core.Block) {
 func (s *Shard) SetInitialAccountState(Addrs map[common.Address]struct{}, maxValue *big.Int) {
 	statedb := s.blockchain.GetStateDB()
 	for addr := range Addrs {
-		statedb.AddBalance(addr, maxValue)
+		statedb.SetBalance(addr, maxValue)
+		//log.Debug("SetInitialAccountState", "addr", addr, "state", statedb.GetOrNewStateObject(addr).Balance())
 		if curValue := statedb.GetBalance(addr); curValue.Cmp(maxValue) != 0 {
 			log.Error("Opps, something wrong!", "curValue", curValue, "Set maxValue", maxValue)
 		}
-
+		s.AllAddrs = append(s.AllAddrs, addr)
 	}
+	log.Info("The number of Alladdrs", "len", len(s.AllAddrs))
 }
 
 func (s *Shard) GetStateDB() *state.StateDB {
@@ -185,6 +205,7 @@ func (s *Shard) executeTransaction(tx *core.Transaction, stateDB *state.StateDB,
 		state.SubBalance(*tx.Sender, tx.Value)
 	} else if tx.TXtype == core.CrossTXType2 {
 		state.AddBalance(*tx.Recipient, tx.Value)
+		//log.Debug("CrossTxType2", "Recipient", tx.Recipient, "Value", tx.Value)
 	} else if tx.TXtype == core.RollbackTXType {
 		state.SetNonce(*tx.Sender, state.GetNonce(*tx.Sender)-1)
 		state.AddBalance(*tx.Sender, tx.Value)
@@ -216,19 +237,27 @@ func (s *Shard) ConsensusInitialize(shardID uint32, clientCnt int, _node *eth_no
 func (s *Shard) ConsensusStart(nodeId uint32) {
 	s.to_reconfig = false
 	if utils.IsComLeader(nodeId) { // 只有委员会的leader节点会运行worker，即出块
-		//pool := NewTxPool(s.Node.NodeInfo.ComID)
-		//s.txPool = pool
-		//pool.setCommittee(s)
+		log.Info("shard.start", "Leader", nodeId)
+		pool := NewTxPool(s.Node.NodeInfo.ShardID)
+		s.txPool = pool
+		pool.setCommittee(s)
 
 		worker := newWorker(s.config)
 		s.worker = worker
 		worker.setCommittee(s)
 	}
-	log.Debug("shard.Start", "shardID", s.Node.NodeInfo.ComID)
+	s.activeAddrs = make(map[common.Address]int)
+	log.Debug("shard.Start", "shardID", s.Node.NodeInfo.ShardID)
 }
 
 func (s *Shard) WorkerStart() {
+	log.Info("worker start")
 	s.worker.start()
+}
+
+func (s *Shard) CommitSyncInfo(txs []*core.Transaction, addrlist []common.Address) {
+	log.Info("start commit sync info")
+	s.worker.SyncCommit(txs, addrlist)
 }
 
 func (s *Shard) ConsensusClose() {
@@ -288,8 +317,9 @@ func (s *Shard) ExecutionAddTBs(tbblock *beaconChain.TBBlock) {
 }
 
 func (s *Shard) AdjustRecordedAddrs(addrs []common.Address, vrfs [][]byte, seedHeight uint64) {
+	log.Info("AdjustRecordedAddrs Shard 319")
 	data := &core.AdjustAddrs{
-		ComID:      s.Node.NodeInfo.ComID,
+		ComID:      s.Node.NodeInfo.ShardID,
 		Addrs:      addrs,
 		Vrfs:       vrfs,
 		SeedHeight: seedHeight,
@@ -319,14 +349,18 @@ func (s *Shard) send2Client(receipts map[uint64]*result.TXReceipt, txs []*core.T
 		}
 	}
 	for cid := range msg2Client {
-		s.messageHub.Send(core.MsgTypeCommitteeReply2Client, uint32(cid), msg2Client[cid], nil)
+		ComReply2Client := &core.ComReply2Client{
+			ComID:   s.Node.NodeInfo.ShardID,
+			Results: msg2Client[cid],
+		}
+		s.messageHub.Send(core.MsgTypeCommitteeReply2Client, uint32(cid), ComReply2Client, nil)
 	}
 }
 
 func (s *Shard) getStatusFromShard(addrList []common.Address) *core.ShardSendState {
 	request := &core.ComGetState{
-		From_comID:     s.Node.NodeInfo.ComID,
-		Target_shardID: s.Node.NodeInfo.ComID,
+		From_comID:     s.Node.NodeInfo.ShardID,
+		Target_shardID: s.Node.NodeInfo.ShardID,
 		AddrList:       addrList, // TODO: implement it
 	}
 
@@ -374,7 +408,7 @@ func (s *Shard) GetEthChainBlockHash(height uint64) (common.Hash, uint64) {
 		got_height = ret[1].(uint64)
 		channel <- struct{}{}
 	}
-	s.messageHub.Send(core.MsgTypeGetBlockHashFromEthChain, s.Node.NodeInfo.ComID, height, callback)
+	s.messageHub.Send(core.MsgTypeGetBlockHashFromEthChain, s.Node.NodeInfo.ShardID, height, callback)
 	// 阻塞
 	<-channel
 
@@ -405,6 +439,7 @@ func (s *Shard) HandleGetPoolTx() *core.PoolTx {
 		Pending:         s.oldTxPool.pending,
 		PendingRollback: s.oldTxPool.pendingRollback,
 	}
+	log.Info("HandleGetPoolTx", "Pending", len(s.oldTxPool.pending), "Pendingroolback", len(s.oldTxPool.pendingRollback))
 	return poolTx
 }
 
@@ -419,7 +454,7 @@ func (s *Shard) SetOldTxPool() {
 	defer s.txPool.r_lock.Unlock()
 
 	s.oldTxPool = s.txPool
-	log.Debug("SetOldTxPool", "comID", s.Node.NodeInfo.ComID, "pendingLen", len(s.oldTxPool.pending), "rollbackLen", len(s.oldTxPool.pendingRollback))
+	log.Debug("SetOldTxPool", "ShardID", s.Node.NodeInfo.ShardID, "pendingLen", len(s.oldTxPool.pending), "rollbackLen", len(s.oldTxPool.pendingRollback))
 }
 
 func (s *Shard) UpdateTbChainHeight(height uint64) {
@@ -438,7 +473,7 @@ func (s *Shard) NewBlockGenerated(block *core.Block) {
 		msg := &core.InitReconfig{
 			Seed:       seed,
 			SeedHeight: height,
-			ComID:      s.Node.NodeInfo.ComID,
+			ComID:      s.Node.NodeInfo.ShardID,
 		}
 
 		log.Debug("init reconfig")
@@ -464,4 +499,13 @@ func (s *Shard) AddInitialAddr(addr common.Address, nodeID uint32) {
 
 func (s *Shard) GetNodeAddrs() []common.Address {
 	return s.initialAddrList
+}
+
+func (s *Shard) HandleLeaderTX(txs []*core.Transaction, nodeID uint32) {
+	log.Debug("HandleLeaderTX", "leader=", nodeID, "tx=", len(txs))
+	s.txPool.AddTxs(txs)
+}
+
+func (s *Shard) SetAllAddrs(addrlist []common.Address) {
+	s.AllAddrs = addrlist
 }

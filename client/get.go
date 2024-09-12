@@ -17,6 +17,7 @@ import (
  * 该函数在loadData后被调用一次，将分配到此客户端的交易加入队列中，并多设一个map用于快速根据交易ID找到交易
  */
 func (c *Client) Addtxs(txs []*core.Transaction) {
+	log.Info("Start to Addtxs")
 	for _, tx := range txs {
 		tx.RollbackHeight = uint64(c.rollbackHeight)
 	}
@@ -27,17 +28,20 @@ func (c *Client) Addtxs(txs []*core.Transaction) {
 	}
 }
 
-/** 客户端收到委员会发送的交易收据，存入本地
+/*
+* 客户端收到委员会发送的交易收据，存入本地
 * 客户端不会立即对交易进行处理，比如发送跨片交易后半部分，
 需要等到收到信标链的信标确认消息才会对交易进行处理
 */
 func (c *Client) AddTXReceipts(receipts []*result.TXReceipt) {
+	log.Info("Start to AddTXReceipts")
+	log.Info("lock c.r_lock")
 	c.r_lock.Lock()
 	defer c.r_lock.Unlock()
 	for _, r := range receipts {
 		c.tx_reply.PushBack(r)
 	}
-
+	log.Info("unlock c.r_lock")
 }
 
 /** 获取信标
@@ -68,16 +72,21 @@ func (c *Client) AddTBs(tbblock *beaconChain.TBBlock) {
 		}
 	}
 	c.tbchain_height = tbblock.Height
+	log.Debug("AddTBs", "processTXReceipts")
 	c.processTXReceipts()
+	log.Debug("AddTBs", "checkExpiredTXs")
 	c.checkExpiredTXs()
-
+	log.Debug("AddTBs", "all finish")
 }
 
-/**
+/*
+*
 * 遍历 tx_reply，如果某个交易的区块信标已确认，则对该交易进行后续处理：
 如果交易已完成，则记录确认时间；如果交易未完成，则加入到新队列中等待被发送
 */
 func (c *Client) processTXReceipts() {
+	log.Info("Start to processTXReceipts")
+	log.Info("lock c.r_lock")
 	c.r_lock.Lock()
 	defer c.r_lock.Unlock()
 	c.c2_lock.Lock()
@@ -101,6 +110,7 @@ func (c *Client) processTXReceipts() {
 		tb := c.tbs[uint32(r.ShardID)][r.BlockHeight]
 		r.ConfirmTimeStamp = tb.ConfirmTime
 		to_record[r.TxID] = r
+		//log.Debug("processTXReceipts", "TxStatus", r.TxStatus)
 		if r.TxStatus == result.IntraSuccess {
 			// do nothing
 		} else if r.TxStatus == result.CrossTXType1Success {
@@ -117,6 +127,7 @@ func (c *Client) processTXReceipts() {
 			// 2. 记录到 cross1_confirm_height_map 中
 			c.cross1_confirm_height_map[r.TxID] = c.shard_cur_heights[uint32(tx.Recipient_sid)]
 		} else if r.TxStatus == result.CrossTXType2Success {
+			/*Aug 11st 00:26*/
 			// 只要是确认了，就一定不是超时的
 			// 删除cross1_confirm_height_map中的项
 			if _, ok := c.cross1_confirm_height_map[r.TxID]; !ok {
@@ -137,10 +148,11 @@ func (c *Client) processTXReceipts() {
 		e = n
 	}
 	c.recordTXReceipts(to_record)
-
+	log.Info("unlock c.r_lock")
 }
 
 func (c *Client) HandleBooterSendContract(data *core.BooterSendContract) {
+	log.Info("Start to HandleBooterSendContract")
 	c.contractAddr = data.Addr
 	contractABI, err := abi.JSON(strings.NewReader(eth_chain.MyContractABI()))
 	if err != nil {

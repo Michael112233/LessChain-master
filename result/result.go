@@ -7,6 +7,8 @@ import (
 	"os"
 	"sort"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/schollz/progressbar/v3"
 )
@@ -25,6 +27,10 @@ var (
 	res           *Result
 	bar           *progressbar.ProgressBar
 	IsProgressBar bool
+	/* 重组时交换的交易量 */
+	ReconfigTxNum atomic.Int64
+	Tps_list      []float64
+	begin_time    uint64
 	// w3rollbackInterval uint64 = uint64(20)
 )
 
@@ -61,6 +67,8 @@ func NewResult() {
 		BroadcastMap: make([]uint64, 0),
 		ConfirmMap:   make([]uint64, 0),
 	}
+	ReconfigTxNum.Store(0)
+	begin_time = uint64(time.Now().Unix())
 }
 func GetResult() *Result {
 	return res
@@ -103,6 +111,13 @@ func SetBroadcastMap(table map[uint64]uint64) {
 }
 func GetBroadcastMap() []uint64 {
 	return res.BroadcastMap
+}
+
+func GetTps() float64 {
+	usedTime := uint64(time.Now().Unix()) - begin_time
+	thrput := float64(res.allComplished) / float64(usedTime)
+	log.Debug("tps", "now", time.Now().Unix(), "begin", begin_time, "tps", thrput)
+	return thrput
 }
 
 func SetTXReceiptV2(table map[uint64]*TXReceipt) {
@@ -214,6 +229,7 @@ func GetThroughtPutAndLatencyV2() (float64, float64, float64, []int) {
 	log.Info("used time: " + fmt.Sprint(usedTime) + " (s)")
 	thrput := float64(res.allComplished) / float64(usedTime)
 	log.Info("throughput: " + fmt.Sprint(thrput) + " (tx/s)")
+	log.Info("throughput_list: " + fmt.Sprint(Tps_list))
 
 	averageLatency := float64(sum) / float64(res.allComplished)
 	log.Info("average latency: " + fmt.Sprint(averageLatency))
@@ -233,6 +249,7 @@ func GetThroughtPutAndLatencyV2() (float64, float64, float64, []int) {
 		overloads = append(overloads, res.workload4shard[k])
 	}
 	log.Info("wordload for shard", "array", overloads)
+	log.Info("Reconfig tx num: " + fmt.Sprint(ReconfigTxNum.Load()))
 
 	return thrput, averageLatency, rollbackRate, overloads
 }

@@ -98,6 +98,7 @@ func (tbChain *BeaconChain) generateEthChainBlock() *TBBlock {
 		}
 
 		event := <-eventChannel
+		log.Info("ethchainInterface 101")
 		// tbChain.height = uint64(utils.Max(int(tbChain.height), ))
 		if start_eth_height == 0 {
 			start_eth_height = event.Eth_height
@@ -115,6 +116,8 @@ func (tbChain *BeaconChain) generateEthChainBlock() *TBBlock {
 			to_pack = true
 		}
 	}
+
+	log.Info("Interface 120")
 
 	// // 在当前设置中，当客户端注入交易完成时，会发送消息停止所有节点。
 	// // 节点退出时，交易未被全部处理，因而一定有未被打包的信标。

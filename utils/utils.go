@@ -70,6 +70,14 @@ func Max(a, b int) int {
 	return b
 }
 
+func Sum(list map[uint32]map[uint32]string) int {
+	sum := 0
+	for i := 0; i < len(list); i++ {
+		sum += len(list[uint32(i)])
+	}
+	return sum
+}
+
 /**
  * 从给定的结构体指针中获得指定的字段，返回字段值组成的数组
  * structPointer 的类型必须是 *structType
@@ -140,7 +148,9 @@ func Addr2Shard(addr string, shardNum int) int {
 	return int(num) % shardNum
 }
 
-/* 将vrf值映射到分片ID
+/*
+	将vrf值映射到分片ID
+
 此方法暂时只适用于基于ecdsa的vrf算法
 */
 func VrfValue2Shard(value []byte, shardNum uint32) uint32 {

@@ -2,7 +2,12 @@ package eth_node
 
 import (
 	"fmt"
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"go-w3chain/cfg"
 	"go-w3chain/core"
 	"go-w3chain/eth_chain"
@@ -12,12 +17,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
-
-	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/rawdb"
-	"github.com/ethereum/go-ethereum/ethdb"
 )
 
 type EthNode struct {
@@ -42,7 +41,8 @@ type EthNode struct {
 
 	com core.Shard
 
-	txPool *TxPool
+	oldTxPool *TxPool
+	txPool    *TxPool
 
 	/* 节点上一次运行vrf得到的结果 */
 	VrfValue []byte
@@ -53,11 +53,13 @@ type EthNode struct {
 
 	messageHub core.MessageHub
 
-	reconfigMode        string
-	reconfigResLock     sync.Mutex
-	reconfigResult      *core.ReconfigResult                // 本节点的重组结果
-	reconfigResults     []*core.ReconfigResult              // 本委员会所有节点的重组结果
-	com2ReconfigResults map[uint32]*core.ComReconfigResults // 所有委员会的节点的重组结果
+	reconfigMode          string
+	reconfigResLock       sync.Mutex
+	reconfigResult        *core.ReconfigResult                // 本节点的重组结果
+	reconfigResults       []*core.ReconfigResult              // 本委员会所有节点的重组结果
+	com2ReconfigResults   map[uint32]*core.ComReconfigResults // 所有委员会的节点的重组结果
+	oppositeExecutionInfo *core.ExecutionInfo
+	oldComID              uint32
 
 	currentState *state.StateDB
 	activeAddrs  map[common.Address]int
@@ -82,6 +84,9 @@ func NewNode(parentdataDir string, committeeNum, shardID, comID, nodeID, committ
 	node.w3Account = NewW3Account(node.DataDir)
 	printAccounts(node.w3Account)
 
+	node.txPool = NewTxPool(node.NodeInfo.NodeID)
+	node.txPool.setNode(node)
+
 	db, err := node.OpenDatabase("chaindata", 0, 0, "", false)
 	if err != nil {
 		log.Error("open database fail", "nodeID", nodeID)
@@ -89,9 +94,17 @@ func NewNode(parentdataDir string, committeeNum, shardID, comID, nodeID, committ
 	node.db = db
 
 	// 节点刚创建时，shardID == ComID
-	node.pbftNode = pbft.NewPbftNode(node.NodeInfo, uint32(committeeSize), "")
+	node.pbftNode = pbft.NewPbftNode(node.NodeInfo, uint32(4), "")
 
 	return node
+}
+
+func (node *EthNode) HandleSendSync2Node(statelist map[common.Address]*types.StateAccount) {
+	stateDB := node.com.GetStateDB()
+	for addr, state := range statelist {
+		stateDB.SetBalance(addr, state.Balance)
+	}
+	log.Info(fmt.Sprintf("finish sync to node %d com %d", node.NodeInfo.NodeID, node.NodeInfo.ComID))
 }
 
 func (node *EthNode) SetMessageHub(hub core.MessageHub) {
@@ -100,9 +113,7 @@ func (node *EthNode) SetMessageHub(hub core.MessageHub) {
 
 func (node *EthNode) Start() {
 	node.com.ConsensusStart(node.NodeInfo.NodeID)
-	node.com.Start()
 	node.sendNodeInfo()
-	node.sendTx2Com()
 }
 
 func (node *EthNode) sendNodeInfo() {
@@ -114,18 +125,28 @@ func (node *EthNode) sendNodeInfo() {
 		Addr:     node.w3Account.accountAddr,
 	}
 	log.Debug(fmt.Sprintf("sendNodeInfo... addr: %x", info.Addr))
-	node.messageHub.Send(core.MsgTypeNodeSendInfo2Leader, node.NodeInfo.ComID, info, nil)
+	node.messageHub.Send(core.MsgTypeNodeSendInfo2Leader, node.NodeInfo.ShardID, info, nil)
 }
 
-func (node *EthNode) sendTx2Com() {
-	for {
-		time.Sleep(1000 * time.Millisecond)
-		txs, _ := node.txPool.Pending(node.maxBlockSize)
-		node.messageHub.Send(core.MsgTypeNodeSendTx2Com, uint32(0), txs, nil)
-		if node.txPool.Empty() {
-			break
-		}
+func (node *EthNode) sendTx2Com(txs []*core.Transaction) {
+	//for {
+	//	time.Sleep(1000 * time.Millisecond)
+	//	txs, _ := node.txPool.Pending(node.maxBlockSize)
+	//	log.Debug("SendTx2Com", "Start to send txs to committee:", len(txs))
+	//	comGetTx := &core.ComGetTx{
+	//		Txs:         txs,
+	//		From_nodeID: node.GetNodeID(),
+	//	}
+	//	node.messageHub.Send(core.MsgTypeNodeSendTx2Com, node.NodeInfo.ShardID, comGetTx, nil)
+	//	if node.txPool.Empty() {
+	//		break
+	//	}
+	//}
+	comGetTx := &core.ComGetTx{
+		Txs:         txs,
+		From_nodeID: node.GetNodeID(),
 	}
+	node.messageHub.Send(core.MsgTypeNodeSendTx2Com, node.NodeInfo.ShardID, comGetTx, nil)
 }
 
 func (node *EthNode) HandleClientSendtx(txs []*core.Transaction) {
@@ -133,7 +154,10 @@ func (node *EthNode) HandleClientSendtx(txs []*core.Transaction) {
 	if node.txPool == nil { // 交易池尚未创建，丢弃该交易
 		return
 	}
-	node.txPool.AddTxs(txs)
+	//node.txPool.AddTxs(txs)
+	//if len(txs) > 0 {
+	node.sendTx2Com(txs)
+	//}
 }
 
 func (node *EthNode) RunPbft(block *core.Block, exit chan struct{}) {
@@ -143,6 +167,7 @@ func (node *EthNode) RunPbft(block *core.Block, exit chan struct{}) {
 
 	select {
 	case <-node.pbftNode.OneConsensusDone:
+		log.Info("one consensus done")
 		return
 	case <-exit:
 		exit <- struct{}{}
@@ -159,15 +184,29 @@ func (node *EthNode) GetShard() core.Shard {
 	return node.com
 }
 
-//func (node *EthNode) GetCommittee() core.Committee {
-//	return node.com
-//}
+func (node *EthNode) HandleGetOppositeShard() *core.Shard {
+	return &(node.com)
+}
+
+func (node *EthNode) SetOldTxPool() {
+	if node.txPool == nil {
+		return
+	}
+	node.txPool.lock.Lock()
+	defer node.txPool.lock.Unlock()
+	node.txPool.r_lock.Lock()
+	defer node.txPool.r_lock.Unlock()
+
+	node.oldTxPool = node.txPool
+	log.Debug("SetOldTxPool", "ShardID", node.NodeInfo.ShardID, "pendingLen", len(node.oldTxPool.pending), "rollbackLen", len(node.oldTxPool.pendingRollback))
+}
 
 func (node *EthNode) GetPbftNode() *pbft.PbftConsensusNode {
 	return node.pbftNode
 }
 
 func (node *EthNode) Close() {
+	log.Info("Time to close Eth Node")
 	node.CloseDatabase()
 }
 
@@ -223,7 +262,7 @@ func (n *EthNode) HandleBooterSendContract(data *core.BooterSendContract) {
 */
 
 // OpenDatabase opens an existing database with the given name (or creates one if no
-// previous can be found) from within the node's instance directory.
+// previous can be found) from within the node'node instance directory.
 func (n *EthNode) OpenDatabase(name string, cache, handles int, namespace string, readonly bool) (ethdb.Database, error) {
 	// namepsace = "", file = /home/pengxiaowen/.brokerChain/xxx/name
 	// cache , handle = 0, readonly = false
@@ -243,41 +282,6 @@ func (n *EthNode) CloseDatabase() {
 		log.Error("closeDatabase fail.", "nodeInfo", n.NodeInfo)
 	}
 	// log.Debug("closeDatabase", "nodeID", n.NodeInfo.NodeID)
-}
-
-// execute transactions
-func (n *EthNode) ExecuteTransactions(txs []*core.Transaction) common.Hash {
-	now := time.Now().Unix()
-
-	for _, tx := range txs {
-		n.executeTransaction(tx, n.currentState, now)
-		n.activeAddrs[*tx.Sender] += 1
-		n.activeAddrs[*tx.Recipient] += 1
-	}
-
-	root := n.currentState.IntermediateRoot(false)
-	n.currentState.Commit(false)
-
-	return root
-}
-
-func (n *EthNode) executeTransaction(tx *core.Transaction, stateDB *state.StateDB, now int64) {
-	state := stateDB
-	if tx.TXtype == core.IntraTXType {
-		state.SetNonce(*tx.Sender, state.GetNonce(*tx.Sender)+1)
-		state.SubBalance(*tx.Sender, tx.Value)
-		state.AddBalance(*tx.Recipient, tx.Value)
-	} else if tx.TXtype == core.CrossTXType1 {
-		state.SetNonce(*tx.Sender, state.GetNonce(*tx.Sender)+1)
-		state.SubBalance(*tx.Sender, tx.Value)
-	} else if tx.TXtype == core.CrossTXType2 {
-		state.AddBalance(*tx.Recipient, tx.Value)
-	} else if tx.TXtype == core.RollbackTXType {
-		state.SetNonce(*tx.Sender, state.GetNonce(*tx.Sender)-1)
-		state.AddBalance(*tx.Sender, tx.Value)
-	} else {
-		log.Error("Oops, something wrong! Cannot handle tx type", "cur nodeID", n.GetNodeID(), "type", tx.TXtype, "tx", tx)
-	}
 }
 
 func (n *EthNode) GetNodeID() uint32 {

@@ -23,23 +23,33 @@ func (tbChain *BeaconChain) loop() {
 	timer := time.NewTimer(blockInterval)
 	defer timer.Stop()
 	for {
+		log.Debug("BeaconChain", "loop start")
 		select {
 		case <-timer.C:
+			log.Debug("BeaconChain", "timer start")
 			if tbChain.mode == 0 || tbChain.mode == 1 || tbChain.mode == 2 {
 				block := tbChain.GenerateBlock()
 				if block != nil {
 					tbChain.toPushBlock(block)
 				}
+				log.Debug("BeaconChain", "timer reset")
 				timer.Reset(blockInterval)
 			} else {
 				err := fmt.Errorf("unknown mode of tbChain! mode=%d", tbChain.mode)
 				log.Error("err occurs", "err", err)
 			}
+			log.Info("BeaconChain", "timer end")
 
 		case <-tbChain.stopCh:
 			log.Info("TBChain work loop stop.")
 			return
+
+			//default:
+			//	log.Info("waiting")
+			//	time.Sleep(2000 * time.Millisecond)
 		}
+		//time.Sleep(2000 * time.Millisecond)
+		log.Debug("BeaconChain", "wait to continue")
 	}
 }
 
@@ -96,7 +106,8 @@ func (tbChain *BeaconChain) generateSimulationChainBlock() *TBBlock {
 	return block
 }
 
-/** 信标链生成新区块后，将已确认的区块（包含新的信标）发送给订阅者
+/*
+* 信标链生成新区块后，将已确认的区块（包含新的信标）发送给订阅者
 * 实际情况下，应该是有监督节点监听信标链的新区块，并将其中的信标发送给订阅者。
 这里进行了简化，直接跳过监督节点，由信标链发送给订阅者
 * 订阅者包括客户端、委员会等需要获取信标辅助验证的角色
@@ -119,10 +130,12 @@ func (tbChain *BeaconChain) toPushBlock(block *TBBlock) {
  */
 func (tbChain *BeaconChain) PushBlock2Client(block *TBBlock) {
 	tbChain.messageHub.Send(core.MsgTypeTBChainPushTB2Client, 0, block, nil)
+	log.Debug("PushBlock2Client", "Successfully push")
 }
 
 /** 信标链生成新区块后，将区块（包含新的信标）发送给委员会
  */
 func (tbChain *BeaconChain) PushBlock2Coms(block *TBBlock) {
 	tbChain.messageHub.Send(core.MsgTypeTBChainPushTB2Coms, 0, block, nil)
+	log.Debug("PushBlock2Com", "Successfully push")
 }

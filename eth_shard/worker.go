@@ -72,7 +72,7 @@ func (w *Worker) setCommittee(com *Shard) {
 
 // start sets the running status as 1 and triggers new work submitting.
 func (w *Worker) start() {
-	// log.Info("worker start")
+	log.Info("worker start")
 	atomic.StoreInt32(&w.running, 1)
 	w.startCh <- struct{}{}
 }
@@ -99,6 +99,7 @@ func (w *Worker) close() {
 
 // newWorkLoop is a standalone goroutine to submit new sealing work upon received events.
 func (w *Worker) newWorkLoop(recommit time.Duration) {
+	log.Debug("start new work loop", "nodeaddr", w.com.Node.NodeInfo.NodeAddr, "comid", w.com.Node.NodeInfo.ComID)
 	defer w.wg.Done()
 	var (
 		timestamp int64
@@ -124,13 +125,12 @@ func (w *Worker) newWorkLoop(recommit time.Duration) {
 		/* 通知committee 有新区块产生
 		   当出完一个块需要重组时，worker会阻塞在这个函数内
 		*/
-		log.Debug("start reconfig")
+		log.Debug("start reconfig", "to_config", w.com.to_reconfig)
 		w.com.NewBlockGenerated(block)
-		log.Debug("end reconfig")
+		log.Info("end config")
 
 		// 如果有重组，应在重组完成后再开始打包交易
 		timer.Reset(recommit)
-
 	}
 
 	for {
@@ -141,19 +141,20 @@ func (w *Worker) newWorkLoop(recommit time.Duration) {
 			return
 
 		case <-w.startCh:
-			// log.Debug("worker startch", "comID", w.chain.GetChainID())
+			log.Info("worker startch")
 			timer.Reset(recommit)
 
 		case <-timer.C:
-			// log.Debug("worker timer.c", "comID", w.chain.GetChainID())
+			log.Info("worker timer.c")
 			if w.isRunning() {
 				timestamp = time.Now().Unix()
 				commit()
 			}
 
-			// default:
-			// 	log.Debug("worker default", "comID", w.chain.GetChainID())
-			// 	time.Sleep(1000 * time.Millisecond)
+		default:
+			//log.Debug("worker default")
+			//time.Sleep(1 * time.Millisecond)
+			continue
 		}
 	}
 
@@ -249,6 +250,97 @@ func analyseStates(states *core.ShardSendState) (map[common.Address]*types.State
 	return addr2State, hash2Node
 }
 
+func AnalyseStates(states *core.ShardSendState) (map[common.Address]*types.StateAccount, map[string]trie.Node) {
+	// 每个账户对应的具体状态
+	addr2State := make(map[common.Address]*types.StateAccount)
+	// merkle 路径上每个节点与其哈希的映射
+	hash2Node := make(map[string]myTrie.Node)
+	for addr, encodedState := range states.AccountData {
+		var state types.StateAccount
+		err := rlp.DecodeBytes(encodedState, &state)
+		if err != nil {
+			log.Error(fmt.Sprintf("rlp encode fail. err: %v", err))
+		}
+		addr2State[addr] = &state
+
+		proofs := states.AccountsProofs[addr]
+		for _, proof := range proofs {
+			encodedNode := proof
+			hash := utils.GetHash(encodedNode)
+			// log.Debug(fmt.Sprintf("proof hash: %x", hash))
+			if _, ok := hash2Node[string(hash[:])]; ok { // 已经解析和存储过该node
+				continue
+			}
+			node := myTrie.MustDecodeNode(hash, encodedNode)
+			hash2Node[string(hash[:])] = node
+			// switch node.(type) {
+			// case *myTrie.FullNode:
+			// 	fullNode := node.(*myTrie.FullNode)
+			// 	log.Debug(fmt.Sprintf("node type: %v  data: %v", "fullnode", fullNode.String()))
+			// case *myTrie.ShortNode:
+			// 	shortNode := node.(*myTrie.ShortNode)
+			// 	log.Debug(fmt.Sprintf("node type: %v  key (nibble): %v  value: %v", "shortnode", shortNode.Key, shortNode.Val))
+			// default:
+			// 	log.Error(fmt.Sprintf("unexpected node type")) // proof中应该也不会出现valuenode或hashnode
+			// }
+		}
+	}
+
+	return addr2State, hash2Node
+}
+
+func (w *Worker) SyncCommit(txs []*core.Transaction, addrs []common.Address) {
+	timestamp := time.Now().Unix()
+	parentHeight := w.com.getBlockHeight()
+	log.Debug("commit", "parentHeight=", parentHeight)
+	// 从交易池选取交易，排除掉超时的跨分片交易
+	//txs, addrs := w.GetPendingTx(w.config.MaxBlockSize, parentHeight)
+	// 从分片获取交易相关账户的状态及证明
+	states := w.com.getStatusFromShard(addrs)
+	log.Debug("commit", "states")
+	// 解析状态及证明
+	addr2State, hash2Node := analyseStates(states)
+	// 执行交易，更改账户状态
+	updatedStates := make(map[string]*types.StateAccount) // 注意，key不是地址，是地址的哈希
+	w.executeTransactions(txs, addr2State, updatedStates)
+
+	/* commit and insert to blockchain */
+	w.curHeight = parentHeight.Add(parentHeight, common.Big1)
+	header := &core.Header{
+		Difficulty: math.BigPow(11, 11),
+		Number:     w.curHeight,
+		Time:       uint64(timestamp),
+		ShardID:    uint64(w.com.Node.NodeInfo.ComID),
+	}
+	block, err := w.Finalize(header, txs, hash2Node, states.StatusTrieHash, updatedStates)
+	if err != nil {
+		//return nil, errors.New("failed to commit transition state: " + err.Error())
+		log.Info("failed to commit transition state: " + err.Error())
+	}
+
+	// pbft consensus in committee
+	log.Debug(fmt.Sprintf("start running pbft... comID: %d", w.com.Node.NodeInfo.ComID))
+	w.com.Node.RunPbft(block, w.exitCh)
+	log.Debug(fmt.Sprintf("pbft done... comID: %d", w.com.Node.NodeInfo.ComID))
+
+	// log.Debug("WorkerAccountState")
+	// for _, tx := range txs {
+	// 	log.Debug(fmt.Sprintf("tx type: %v", core.TxTypeStr(tx.TXtype)))
+	// 	log.Debug(fmt.Sprintf("accountHash: %x  value: %v", utils.GetHash((*tx.Sender)[:]), addr2State[*tx.Sender]))
+	// 	log.Debug(fmt.Sprintf("accountHash: %x  value: %v", utils.GetHash((*tx.Recipient)[:]), addr2State[*tx.Recipient]))
+	// }
+	log.Info("send block")
+	comSendBlock := &core.ComSendBlock{
+		Block: block,
+	}
+	w.com.HandleComSendBlock(comSendBlock)
+
+	log.Debug("create block", "comID", w.com.Node.NodeInfo.ComID, "block Height", header.Number, "# tx", len(txs), "txpoolLen", w.com.txPool.PendingLen()+w.com.TXpool().PendingRollbackLen())
+	// log.Trace("create block", "comID", w.com.Node.NodeInfo.ComID, "block Height", header.Number, "#TX", len(txs))
+
+	//return block, nil
+}
+
 /* 生成区块，执行区块中的交易，确认状态转移，发送区块到分片，发送收据到客户端 */
 func (w *Worker) commit(timestamp int64) (*core.Block, error) {
 	// 获取分片最新的区块高度
@@ -290,10 +382,14 @@ func (w *Worker) commit(timestamp int64) (*core.Block, error) {
 	// 	log.Debug(fmt.Sprintf("accountHash: %x  value: %v", utils.GetHash((*tx.Sender)[:]), addr2State[*tx.Sender]))
 	// 	log.Debug(fmt.Sprintf("accountHash: %x  value: %v", utils.GetHash((*tx.Recipient)[:]), addr2State[*tx.Recipient]))
 	// }
-
-	w.com.AddBlock2Shard(block)
+	log.Info("send block")
+	comSendBlock := &core.ComSendBlock{
+		Block: block,
+	}
+	w.com.HandleComSendBlock(comSendBlock)
 	/* 生成交易收据, 并发送到客户端 */
 	log.Debug(fmt.Sprintf("sendTXReceipt2Client txs=%v", len(txs)))
+	log.Debug("txpool", "len", w.com.txPool.PendingLen())
 	w.sendTXReceipt2Client(txs)
 
 	log.Debug("create block", "comID", w.com.Node.NodeInfo.ComID, "block Height", header.Number, "# tx", len(txs), "txpoolLen", w.com.txPool.PendingLen()+w.com.TXpool().PendingRollbackLen())
@@ -319,6 +415,7 @@ func (w *Worker) Finalize(
 
 	header.Root = newTireRoot
 	block := core.NewBlock(header, txs, trie.NewStackTrie(nil))
+	log.Debug("Finalize", "block txs size", len(block.Transactions))
 	return block, nil
 
 }
@@ -386,8 +483,8 @@ func rebuildHelper(
 			stateAccount, ok := updadedStates[string(recoverAddressHash)]
 			if ok { // 该地址的状态被更新过
 				encodedBytes, err := rlp.EncodeToBytes(stateAccount)
-				// log.Debug(fmt.Sprintf("stateAccount data: %v encodedBytes: %v", stateAccount, encodedBytes))
-				// log.Debug(fmt.Sprintf("Balance: %v, %v, %v, %v", stateAccount.Balance, stateAccount.Nonce, stateAccount.Root, stateAccount.CodeHash))
+				log.Trace(fmt.Sprintf("stateAccount data: %v encodedBytes: %v", stateAccount, encodedBytes))
+				log.Trace(fmt.Sprintf("Balance: %v, %v, %v, %v", stateAccount.Balance, stateAccount.Nonce, stateAccount.Root, stateAccount.CodeHash))
 				if err != nil {
 					log.Error("rlp encode err", "err", err)
 				}
@@ -444,9 +541,11 @@ func (w *Worker) executeTransaction(
 ) {
 	tx.TXStatus = result.DefaultStatus
 	if tx.TXtype == core.IntraTXType {
+		//log.Debug("intra", "sender", tx.Sender, "sender state", addr2State[*tx.Sender], "receiver", tx.Recipient, "receiver state", addr2State[*tx.Recipient])
 		senderState := addr2State[*tx.Sender]
 		addNonceByOne(senderState)
 		subBalance(addr2State[*tx.Sender], tx.Value)
+		//log.Trace("intra", "balance", addr2State[*tx.Sender].Balance, "sign", addr2State[*tx.Sender].Balance.Sign())
 		updatedStates[string(utils.GetHash((*tx.Sender)[:]))] = senderState
 		receiverState := addr2State[*tx.Recipient]
 		addBalance(receiverState, tx.Value)

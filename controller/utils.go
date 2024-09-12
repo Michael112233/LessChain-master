@@ -43,7 +43,7 @@ func toStopCommittee(node *eth_node.EthNode, recommitIntervalSecs,
 		} else if exitMode == 1 {
 			canStop = node.GetShard().CanStopV2()
 		}
-
+		log.Debug("result", "canstop", canStop)
 		if canStop {
 			node.GetShard().Close()
 			break
@@ -79,27 +79,34 @@ func toStopClient(c *client.Client, recommitIntervalSecs,
 
 	for {
 		canStop := false
+		// modi
+		log.Info("In tostopfunction")
 		if exitMode == 0 {
 			canStop = c.CanStopV1()
 		} else if exitMode == 1 {
 			canStop = c.CanStopV2() && c.InjectDoneMsgSent
 		}
 		c.LogQueues()
+		log.Debug("tostopclient", "after log queues, canstop", canStop)
 		if canStop {
 			c.Close()
 			break
 		}
+		//log.Debug("1", "after log queues, canstop", sleepSecs)
 		// 每出块间隔的一半时间打印一次进度
 		time.Sleep(time.Duration(sleepSecs) * time.Second)
+		//log.Debug("2", "after log queues, canstop", canStop)
 		/* 打印进度 */
 		if isLogProgress {
 			iter++
+			//log.Debug("tostopclient", "iter", iter, "iterNum", iterNum)
 			if iter == iterNum {
 				result.GetPercentage()
 				iter = 0
 			}
 		}
 	}
+	log.Info("Stop Client!")
 }
 
 //func closeNode(node *node.Node) {

@@ -122,11 +122,13 @@ func (c *Client) SetMessageHub(hub core.MessageHub) {
 }
 
 func (c *Client) HandleComSendTxReceipt(receipts []*result.TXReceipt) {
+	log.Debug("HandleComSendTxReceipt")
 	c.AddTXReceipts(receipts)
 }
 
 /* 检查是否有超时的跨片交易 */
 func (c *Client) checkExpiredTXs() {
+	log.Info("checkExpiredTXs")
 	now := time.Now().Unix()
 	c.c1_c_lock.Lock()
 	expired_txs := make([]uint64, 0, len(c.cross1_confirm_height_map)/2)
@@ -162,6 +164,7 @@ func (c *Client) Print() {
 }
 
 func (c *Client) getTBFromTBChain(shardID uint32, height uint64) *beaconChain.ConfirmedTB {
+	log.Debug("GetTB From Chain")
 	var tb *beaconChain.ConfirmedTB
 	callback := func(res ...interface{}) {
 		tb = res[0].(*beaconChain.ConfirmedTB)

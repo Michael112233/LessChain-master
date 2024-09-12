@@ -83,7 +83,7 @@ func runEthClient(allCfg *cfg.Cfg) {
 
 	// 加载交易数据，分配交易到每个节点中
 	data.LoadETHData(allCfg.DatasetDir, allCfg.MaxTxNum)
-	data.SetTxShardId(allCfg.ShardSize)
+	data.SetTxShardId(allCfg.ShardNum)
 
 	// 注入交易到客户端
 	data.SetTX2ClientTable(allCfg.ClientNum)
@@ -108,7 +108,7 @@ func runEthClient(allCfg *cfg.Cfg) {
 	messageHub := messageHub.NewMessageHub()
 
 	/* 设置各个分片、委员会和客户端、信标链的通信渠道 */
-	messageHub.Init(client, nil, nil, tbChain, 1, allCfg.ShardSize, 0, allCfg.ClientNum, &wg)
+	messageHub.Init(client, nil, nil, tbChain, allCfg.ShardNum, allCfg.ShardSize, 0, allCfg.ClientNum, &wg)
 
 	startClient(client, allCfg.InjectSpeed, allCfg.RecommitIntervalSecs)
 	toStopClient(client, allCfg.RecommitIntervalSecs, allCfg.LogProgressInterval,
@@ -150,7 +150,7 @@ func runNode(allCfg *cfg.Cfg) {
 	// 初始化分片中的账户状态
 	if utils.IsShardLeader(node.NodeInfo.NodeID) { // 目前不考虑分片重组和节点失败，只有分片leader需要设置初始状态
 		data.LoadETHData(allCfg.DatasetDir, allCfg.MaxTxNum)
-		data.SetTxShardId(allCfg.ShardSize)
+		data.SetTxShardId(allCfg.ShardNum)
 		data.SetShardInitialAccountState(shard)
 	}
 

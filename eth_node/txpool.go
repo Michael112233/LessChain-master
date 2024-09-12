@@ -192,3 +192,7 @@ func (pool *TxPool) PendingLen() int {
 func (pool *TxPool) PendingRollbackLen() int {
 	return len(pool.pendingRollback)
 }
+
+func (pool *TxPool) PoolLen() int {
+	return pool.PendingLen() + pool.PendingRollbackLen()
+}
