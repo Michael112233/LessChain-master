@@ -275,8 +275,8 @@ func (n *EthNode) EndReconfig(newCom2Results map[uint32][]*core.ReconfigResult, 
 			// 等待交易池更新后再启动worker
 			<-getPoolTxsCh
 		}
-		sizeofPoolTx = len(utils.EncodeAny(poolTx))
-		log.Info("Reconfig Tx nums", "num", sizeofPoolTx)
+		//sizeofPoolTx = len(utils.EncodeAny(poolTx))
+		//log.Info("Reconfig Tx nums", "num", sizeofPoolTx)
 		sum += sizeofPoolTx
 		//n.messageHub.Send(core.MsgTypeGetResults, 0, sizeofPoolTx, nil)
 	}
@@ -419,21 +419,25 @@ func (n *EthNode) fastsync(sizeofPoolTx int, syncStartTime time.Time) {
 	if request.ServerAddr != n.NodeInfo.NodeAddr {
 		callback := func(res ...interface{}) {
 			data = res[0].(*core.SyncData)
-			log.Debug("fastsync data received", "len(states)", len(data.States), "len(blocks)", len(data.Blocks))
+			//log.Debug("fastsync data received", "len(states)", len(data.States), "len(blocks)", len(data.Blocks))
 			stateDB := n.com.GetStateDB()
+			log.Info("States add")
 			for addr, state := range data.States {
 				//log.Debug("fastsync1", "addr", addr, "state", state)
 				addrlist = append(addrlist, addr)
 				stateDB.SetBalance(addr, state.Balance)
 				statelist[addr] = state
 			}
+			log.Info("States finish")
 			//n.com.AddBlock(data.Blocks[len(data.Blocks)-1])
-			sum = len(utils.EncodeAny(data.States)) + len(utils.EncodeAny(data.Blocks))
+			//sum = len(utils.EncodeAny(data.States)) + len(utils.EncodeAny(data.Blocks))
+			//sum = len(utils.EncodeAny(data.States))
 			//n.messageHub.Send(core.MsgTypeGetResults, uint32(0), sum, nil)
 
 			getSyncDataCh <- struct{}{}
 		}
 		n.messageHub.Send(core.MsgTypeGetSyncData, n.NodeInfo.ComID, request, callback)
+		//sum = len(utils.EncodeAny(data.States))
 		sum = len(utils.EncodeAny(data.States)) + len(utils.EncodeAny(data.Blocks))
 		log.Debug("output", "sum", sum, "total", len(data.States))
 	} else {
@@ -452,7 +456,7 @@ func (n *EthNode) fastsync(sizeofPoolTx int, syncStartTime time.Time) {
 	if request1.ServerAddr != n.NodeInfo.NodeAddr {
 		callback1 := func(res ...interface{}) {
 			data = res[0].(*core.SyncData)
-			log.Debug("fastsync data received", "len(states)", len(data.States), "len(blocks)", len(data.Blocks))
+			//log.Debug("fastsync data received", "len(states)", len(data.States), "len(blocks)", len(data.Blocks))
 			stateDB := n.com.GetStateDB()
 			for addr, state := range data.States {
 				addrlist = append(addrlist, addr)
@@ -460,7 +464,8 @@ func (n *EthNode) fastsync(sizeofPoolTx int, syncStartTime time.Time) {
 				statelist[addr] = state
 			}
 
-			sum += len(utils.EncodeAny(data.States)) + len(utils.EncodeAny(data.Blocks))
+			//sum += len(utils.EncodeAny(data.States))
+			//sum += len(utils.EncodeAny(data.States)) + len(utils.EncodeAny(data.Blocks))
 			//log.Debug("output", "sum", sum)
 			//n.messageHub.Send(core.MsgTypeGetResults, uint32(0), sum, nil)
 			getSyncDataCh1 <- struct{}{}
@@ -487,7 +492,9 @@ func (n *EthNode) fastsync(sizeofPoolTx int, syncStartTime time.Time) {
 	n.messageHub.Send(core.MsgTypeGetResults, uint32(0), sum, nil)
 	elapsed := time.Since(syncStartTime)
 	reportMsg := fmt.Sprintf("shardID: %d msgType: %s sizeof states(bytes): %d sizeof blocks(bytes): %d sizeof poolTx(bytes): %d sync time: %d",
-		n.NodeInfo.ComID, "fastsync", len(utils.EncodeAny(data.States)), len(utils.EncodeAny(data.Blocks)), sizeofPoolTx, elapsed.Milliseconds())
+		n.NodeInfo.ComID, "fastsync", 0, 0, sizeofPoolTx, elapsed.Milliseconds())
+	//reportMsg := fmt.Sprintf("shardID: %d msgType: %s sizeof states(bytes): %d sizeof blocks(bytes): %d sizeof poolTx(bytes): %d sync time: %d",
+	//	n.NodeInfo.ComID, "fastsync", len(utils.EncodeAny(data.States)), len(utils.EncodeAny(data.Blocks)), sizeofPoolTx, elapsed.Milliseconds())
 	n.messageHub.Send(core.MsgTypeReportAny, 0, reportMsg, nil)
 	//n.messageHub.Send(core.MsgTypeSendSync2Node, n.NodeInfo.ComID, statelist, nil)
 

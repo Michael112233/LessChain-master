@@ -29,6 +29,18 @@ func (c *Client) SendTXs(inject_speed int) {
  * 按一定速率将客户端的交易注入到分片
  */
 func (c *Client) InjectTXs(cid int, inject_speed int) {
+	//ticker := time.NewTicker(10 * time.Second)
+	//defer ticker.Stop()
+	//
+	//// 启动一个循环，以处理定时事件
+	//go func() {
+	//	for {
+	//		select {
+	//		case <-ticker.C:
+	//			result.GetTps()
+	//		}
+	//	}
+	//}()
 	c.injectCnt = 0
 	resBroadcastMap := make(map[uint64]uint64)
 

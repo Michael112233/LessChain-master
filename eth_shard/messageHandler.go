@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"go-w3chain/core"
 	"go-w3chain/log"
-	"go-w3chain/utils"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -34,6 +33,13 @@ func (s *Shard) HandleComGetState(request *core.ComGetState) *core.ShardSendStat
 	// 先看看stateDB中有没有对应账户的节点，没有则先创建节点并更新trie
 	for _, address := range request.AddrList {
 		stateDB.GetOrNewStateObject(address)
+		zero := big.NewInt(0)
+		maxValue := new(big.Int)
+		maxValue.SetString("1000000000000000", 10)
+		if stateDB.GetBalance(address).Cmp(zero) == 0 {
+			stateDB.SetBalance(address, maxValue)
+			s.AllAddrs = append(s.AllAddrs, address)
+		}
 	}
 	log.Info("11111")
 	// 获取最新的状态树
@@ -137,10 +143,14 @@ func (s *Shard) HandleGetSyncData(data *core.GetSyncData) *core.SyncData {
 		stateDB := s.blockchain.GetStateDB()
 		log.Debug("handle sync data", "len", len(s.AllAddrs))
 
+		maxValue := new(big.Int)
+		maxValue.SetString("1000000000000000", 10)
+
 		for _, address := range s.AllAddrs {
-			//if s.activeAddrs[address] != 0 {
-			//	cnt++
-			//}
+			if stateDB.GetBalance(address).Cmp(maxValue) == 0 {
+				//cnt++
+				continue
+			}
 
 			accountState := &types.StateAccount{
 				Nonce:    stateDB.GetNonce(address),
@@ -154,23 +164,24 @@ func (s *Shard) HandleGetSyncData(data *core.GetSyncData) *core.SyncData {
 
 		// 最近区块
 		blocks := s.blockchain.AllBlocks()
-		syncBlockNum := utils.Min(len(blocks), s.fastsyncBlockNum)
-		blocks2sync := blocks[len(blocks)-syncBlockNum:]
+		//syncBlockNum := utils.Min(len(blocks), s.fastsyncBlockNum)
+		//blocks2sync := blocks[len(blocks)-syncBlockNum:]
+		log.Debug("info", "block", len(blocks))
 
 		syncData := &core.SyncData{
 			ClientAddr: data.ClientAddr,
 			States:     states,
-			Blocks:     blocks2sync,
+			Blocks:     blocks,
 		}
-
+		log.Info("finish send sync data")
 		return syncData
 
 	case "fullsync": // 同步全部区块
-		blocks := s.blockchain.AllBlocks()
+		//blocks := s.blockchain.AllBlocks()
 		syncData := &core.SyncData{
 			ClientAddr: data.ClientAddr,
 			States:     make(map[common.Address]*types.StateAccount),
-			Blocks:     blocks,
+			//Blocks:     blocks,
 		}
 
 		return syncData

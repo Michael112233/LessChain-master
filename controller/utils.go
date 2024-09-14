@@ -49,7 +49,9 @@ func toStopCommittee(node *eth_node.EthNode, recommitIntervalSecs,
 			break
 		}
 		// 每出块间隔的一半时间打印一次进度
+		log.Debug("1", "after log queues, canstop", sleepSecs)
 		time.Sleep(time.Duration(sleepSecs) * time.Second)
+		log.Debug("2", "after log queues, canstop", canStop)
 		/* 打印进度 */
 		if isLogProgress {
 			iter++
@@ -59,6 +61,7 @@ func toStopCommittee(node *eth_node.EthNode, recommitIntervalSecs,
 			}
 		}
 	}
+	log.Info("stop node")
 }
 
 /**
@@ -92,10 +95,10 @@ func toStopClient(c *client.Client, recommitIntervalSecs,
 			c.Close()
 			break
 		}
-		//log.Debug("1", "after log queues, canstop", sleepSecs)
+		log.Debug("1", "after log queues, canstop", sleepSecs)
 		// 每出块间隔的一半时间打印一次进度
 		time.Sleep(time.Duration(sleepSecs) * time.Second)
-		//log.Debug("2", "after log queues, canstop", canStop)
+		log.Debug("2", "after log queues, canstop", canStop)
 		/* 打印进度 */
 		if isLogProgress {
 			iter++

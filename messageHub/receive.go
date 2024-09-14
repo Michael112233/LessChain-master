@@ -502,6 +502,7 @@ func handleGetSyncData(dataBytes []byte, conn net.Conn) {
 	msgBytes := buf1.Bytes()
 
 	// 前缀加上长度，防止粘包
+	log.Debug("debug", "len of msg", uint64(len(msgBytes)))
 	networkBuf := make([]byte, 8+len(msgBytes))
 	binary.BigEndian.PutUint64(networkBuf[:8], uint64(len(msgBytes)))
 	copy(networkBuf[8:], msgBytes)
@@ -510,8 +511,10 @@ func handleGetSyncData(dataBytes []byte, conn net.Conn) {
 	if err != nil {
 		log.Error("WriteError", "err", err)
 	}
-	log.Info(fmt.Sprintf("Msg response Sent: %s syncMode: %s len(states): %d len(blocks): %d", GetSyncData, data.SyncType, len(syncData.States), len(syncData.Blocks)))
-	log.Info(fmt.Sprintf("Analyse SyncData size... sizeof State(bytes): %d  sizeof Blocks(bytes): %d", len(utils.EncodeAny(syncData.States)), len(utils.EncodeAny(syncData.Blocks))))
+	//log.Info(fmt.Sprintf("Msg response Sent: %s syncMode: %s len(states): %d len(blocks): %d", GetSyncData, data.SyncType, len(syncData.States), len(syncData.Blocks)))
+	//log.Info(fmt.Sprintf("Analyse SyncData size... sizeof State(bytes): %d  sizeof Blocks(bytes): %d", len(utils.EncodeAny(syncData.States)), len(utils.EncodeAny(syncData.Blocks))))
+	log.Info(fmt.Sprintf("Msg response Sent: %s syncMode: %s len(states): %d len(blocks): %d", GetSyncData, data.SyncType, 0, 0))
+	log.Info(fmt.Sprintf("Analyse SyncData size... sizeof State(bytes): %d  sizeof Blocks(bytes): %d", 0, 0))
 }
 
 func handleGetExecutionInfo(dataBytes []byte, conn net.Conn) {
@@ -540,7 +543,7 @@ func handleGetExecutionInfo(dataBytes []byte, conn net.Conn) {
 	// 前缀加上长度，防止粘包
 	networkBuf := make([]byte, 4+len(msgBytes))
 	binary.BigEndian.PutUint32(networkBuf[:4], uint32(len(msgBytes)))
-	copy(networkBuf[4:], msgBytes)
+	copy(networkBuf[8:], msgBytes)
 	// 发送回复
 	_, err = conn.Write(networkBuf)
 	if err != nil {
@@ -614,6 +617,7 @@ func handleSendResults(dataBytes []byte) {
 
 	result.ReconfigTxNum.Add(data1)
 	result.Tps_list = append(result.Tps_list, result.GetTps())
+	result.Cost_list = append(result.Cost_list, uint64(data1))
 }
 
 func handleConnection(conn net.Conn, ln net.Listener) {

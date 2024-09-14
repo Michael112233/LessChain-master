@@ -30,6 +30,7 @@ var (
 	/* 重组时交换的交易量 */
 	ReconfigTxNum atomic.Int64
 	Tps_list      []float64
+	Cost_list     []uint64
 	begin_time    uint64
 	// w3rollbackInterval uint64 = uint64(20)
 )
@@ -117,6 +118,14 @@ func GetTps() float64 {
 	usedTime := uint64(time.Now().Unix()) - begin_time
 	thrput := float64(res.allComplished) / float64(usedTime)
 	log.Debug("tps", "now", time.Now().Unix(), "begin", begin_time, "tps", thrput)
+	return thrput
+}
+
+func GetWorkload() float64 {
+	usedTime := uint64(time.Now().Unix()) - begin_time
+	workload := res.WorkLoad
+	thrput := float64(workload) / float64(usedTime)
+	log.Debug("workload", "now", time.Now().Unix(), "begin", begin_time, "tps", thrput)
 	return thrput
 }
 
@@ -230,6 +239,7 @@ func GetThroughtPutAndLatencyV2() (float64, float64, float64, []int) {
 	thrput := float64(res.allComplished) / float64(usedTime)
 	log.Info("throughput: " + fmt.Sprint(thrput) + " (tx/s)")
 	log.Info("throughput_list: " + fmt.Sprint(Tps_list))
+	log.Info("cost_list: " + fmt.Sprint(Cost_list))
 
 	averageLatency := float64(sum) / float64(res.allComplished)
 	log.Info("average latency: " + fmt.Sprint(averageLatency))

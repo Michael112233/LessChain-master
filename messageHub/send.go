@@ -1005,6 +1005,7 @@ func sendGetSyncData(comID uint32, msg interface{}, callback func(...interface{}
 	log.Info(fmt.Sprintf("Msg Sent: %s syncMode: %v, Get from %s", GetSyncData, data.SyncType, addr))
 
 	// 等待回复
+	//time.Sleep(100 * time.Millisecond)
 
 	// 首先读取消息长度的四个字节
 	lengthBuf := make([]byte, 8)
@@ -1026,11 +1027,11 @@ func sendGetSyncData(comID uint32, msg interface{}, callback func(...interface{}
 	syncData := new(core.SyncData)
 	log.Info("111")
 	decodeBuf := bytes.NewReader(msgBuf)
-	log.Info("222")
+	log.Trace("222", decodeBuf)
 	decoder := gob.NewDecoder(decodeBuf)
 	log.Info("333")
 	err = decoder.Decode(syncData)
-	log.Debug("444", "syncData", len(syncData.States))
+	//log.Debug("444", "syncData", len(syncData.States))
 	if err != nil {
 		log.Error("Failed to decode", "err", err)
 	}
